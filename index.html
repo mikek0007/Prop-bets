@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#13203A">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Super Bowl Pool">
 <title>Super Bowl Pool</title>
@@ -143,9 +144,9 @@ input:disabled{opacity:.7}
 .ln{fill:none;stroke:var(--ink);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 .scorepair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .urlhint{font-size:13px;color:var(--ink-2);overflow-wrap:anywhere;user-select:all}
-.fame-hero{display:flex;justify-content:center;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.fame-hero{display:flex;flex-direction:column;align-items:center;gap:12px;justify-content:center;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .fame-hero img{display:block;width:auto;max-width:100%;max-height:440px;border-radius:6px}
-.fame-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.fame-row{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .fame-row.lead{background:var(--accent-bg);border-color:var(--accent)}
 .fame-row .yr{font:800 30px/1 var(--display);font-variant-numeric:tabular-nums;min-width:3.2ch}
 .fame-row .name{overflow-wrap:anywhere}
@@ -156,6 +157,23 @@ a.linkbtn{display:inline-block}
 @media (max-width:440px){.tabs a{padding:12px 9px;font-size:16px;letter-spacing:.02em}}
 .foot{margin-top:32px;text-align:center}
 .linkbtn{background:none;border:0;color:var(--ink-2);font:inherit;font-size:13px;text-decoration:underline;padding:12px;cursor:pointer}
+.qphoto{display:block;width:100%;max-height:260px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.filebtn{position:relative;display:inline-flex;align-items:center;overflow:hidden;cursor:pointer}
+.filebtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.avatar{flex:none;width:56px;height:56px;padding:0;border-radius:50%;overflow:hidden;border:2px solid var(--line);background:var(--bg);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.avatar.plain{cursor:default}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar .ico,.avatar .ico svg{width:42px;height:42px}
+.fame-item{display:grid;gap:6px}
+.fame-tools{padding:0 4px}
+.fame-res{display:grid;gap:8px;margin:2px 0 6px}
+.lightbox{position:fixed;inset:0;z-index:50;display:grid;place-content:center;justify-items:center;gap:14px;padding:20px;background:rgba(8,12,22,.9)}
+.lightbox img{max-width:100%;max-height:68vh;border-radius:10px}
+.lightbox .cap{color:#fff;font:800 26px/1.1 var(--display);text-transform:uppercase;text-align:center}
+.bar{height:10px;border-radius:6px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ink-2)}
+.bar.good i{background:var(--good)}
+.names{font-size:14px;color:var(--ink-2);overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -262,7 +280,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   if (!/^[a-z0-9]{3,24}$/.test(pid)) pid = '';
   var rootDb = null, poolList = [], versionList = [], poolsLoaded = false, hostSubs = false;
   var poolForm = { name: '', source: 'blank' }, versionName = '';
-  var fameList = [], fameLoaded = false, fameForm = { year: '', name: '' }, adminList = [], isMaster = false;
+  var fameList = [], fameLoaded = false, fameForm = { year: '', name: '', photo: '' }, adminList = [], isMaster = false;
+  var qimgs = {}, trophy = null, contactMap = {}, contactSubs = false, contactLoadedFor = null;
+  var boardMode = 'player', bqId = null;
+  var fameOpen = new Set(), fameData = {}, fameEntryOpen = new Set(), legacyFame;
 
   function lsGet(k) { try { return localStorage.getItem('sbp:' + k) || ''; } catch (e) { return ''; } }
   function lsSet(k, v) { try { localStorage.setItem('sbp:' + k, v); } catch (e) {} }
@@ -308,6 +329,63 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     });
     chain = p;
     return p;
+  }
+
+  /* ---------- photos ---------- */
+  function arr(v) {
+    return Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.keys(v).sort(function (a, b) { return a - b; }).map(function (k) { return v[k]; }) : []);
+  }
+  function fileToDataUrl(file, maxSide, maxChars) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        try {
+          var sc = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+          var w = Math.max(1, Math.round(img.naturalWidth * sc)), hh = Math.max(1, Math.round(img.naturalHeight * sc));
+          var c = document.createElement('canvas'); c.width = w; c.height = hh;
+          var cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, hh); cx.drawImage(img, 0, 0, w, hh);
+          var q = 0.82, out = c.toDataURL('image/jpeg', q);
+          while (out.length > maxChars && q > 0.35) { q -= 0.08; out = c.toDataURL('image/jpeg', q); }
+          URL.revokeObjectURL(url);
+          if (out.length > maxChars) reject(new Error('too big')); else resolve(out);
+        } catch (e) { reject(e); }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
+      img.src = url;
+    });
+  }
+  function fileBtn(text, onFile) {
+    return h('label', { class: 'btn ghost small filebtn' }, text,
+      h('input', { type: 'file', accept: 'image/*', 'aria-label': text, onchange: function (ev) {
+        var f = ev.target.files && ev.target.files[0];
+        ev.target.value = '';
+        if (f) onFile(f);
+      } }));
+  }
+  function badPhoto() { toast("Couldn't use that photo. Try another one."); }
+  function qBlock(q, id) {
+    var img = qimgs[q.id];
+    if (img) return h('div', { class: 'stack' }, h('img', { class: 'qphoto', src: img, alt: '', loading: 'lazy' }), h('p', { class: 'qtext', id: id, text: q.text }));
+    return h('div', { class: 'qrow' }, qIcon(q), h('p', { class: 'qtext', id: id, text: q.text }));
+  }
+  async function uploadQPhoto(qid, file) {
+    try {
+      var img = await fileToDataUrl(file, 640, 90000);
+      var ok = await enqueue(function () { return db.doc('qimg/' + qid).set({ img: img, at: Date.now() }); });
+      if (ok) toast('Photo saved');
+    } catch (e) { badPhoto(); }
+  }
+  function removeQPhoto(qid) {
+    enqueue(function () { return db.doc('qimg/' + qid).delete(); }).then(function (ok) { if (ok) toast('Photo removed'); });
+  }
+  function qPhotoEditor(q) {
+    var img = qimgs[q.id];
+    return h('div', { class: 'lbl' }, 'Photo',
+      h('small', { text: 'Optional. A photo replaces the cartoon on this question. It saves as soon as you pick it.' }),
+      img ? h('img', { class: 'qphoto', src: img, alt: '', style: 'max-height:140px;object-fit:contain' }) : null,
+      h('div', { class: 'qedit-tools' },
+        fileBtn(img ? 'Change photo' : 'Add photo', function (f) { uploadQPhoto(q.id, f); }),
+        img ? h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () { removeQPhoto(q.id); } }) : null));
   }
 
   /* ---------- cartoon icons ---------- */
@@ -475,7 +553,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     );
   }
   function renderTabs() {
-    var items = [['intro', 'Intro'], ['entry', 'Your picks'], ['board', 'Leaderboard'], ['chat', 'Chat'], ['fame', 'Hall of Fame']];
+    var items = [['intro', 'Intro'], ['entry', 'Your picks'], ['board', 'Leaderboard'], ['chat', 'Trash Talk'], ['fame', 'Hall of Fame']];
     if (canEdit) items.push(['host', 'Host']);
     var latest = chat.length ? (chat[chat.length - 1].ts || 0) : 0;
     if (view === 'chat' && latest > chatSeen) { chatSeen = latest; lsSet('chatSeen', String(latest)); }
@@ -595,7 +673,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('div', { class: 'qhead' },
           h('span', { class: 'qn', text: 'Q' + (qi + 1) }),
           h('span', { class: 'pts-tag', text: pts + (pts === 1 ? ' pt' : ' pts') })),
-        h('div', { class: 'qrow' }, qIcon(q), h('p', { class: 'qtext', id: 'ql-' + q.id, text: q.text })),
+        qBlock(q, 'ql-' + q.id),
         h('div', { class: 'opts' }, opts(q).map(function (o, oi) {
           return h('label', { class: 'opt' },
             h('input', { type: 'radio', name: gname, value: String(oi),
@@ -617,12 +695,16 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
               oninput: function (ev) { draft.tbB = ev.target.value; draft.touched = true; meta(); } })))));
     }
 
-    var trashQ = game.trashPrompt || 'Trash talk: what do you want to say to the rest of the pool?';
-    root.append(h('label', { class: 'lbl card', for: 'f-trash' },
-      h('span', { class: 'qrow' }, iconEl('bubble'), h('span', { text: trashQ })),
-      h('small', { text: 'Optional. Not scored. Shown with your picks once entries close.' }),
-      h('textarea', { id: 'f-trash', rows: 2, maxLength: 200, value: draft.trash || '', disabled: readOnly,
-        oninput: function (ev) { draft.trash = ev.target.value; draft.touched = true; } })));
+    root.append(h('label', { class: 'lbl card', for: 'f-contact' }, 'Email or phone (optional)',
+      h('small', { text: "Only the host can see this. It is used to send you next year's link. Leave it blank if you would rather not." }),
+      h('input', { type: 'text', id: 'f-contact', maxLength: 80, autocomplete: 'email', value: draft.contact || '', disabled: readOnly,
+        oninput: function (ev) { draft.contact = ev.target.value; draft.contactTouched = true; draft.touched = true; } })));
+
+    root.append(h('div', { class: 'card' },
+      h('div', { class: 'qrow' }, iconEl('bubble'),
+        h('div', { class: 'stack' },
+          h('p', { class: 'qtext', text: 'Got something to say to the rest of the pool?' }),
+          h('a', { class: 'btn small link', href: '#chat', text: 'Go to Trash Talk' })))));
 
     var btn = h('button', { class: 'btn', type: 'button', onclick: submitEntry },
       guestId ? 'Save entry' : mine ? 'Update my picks' : 'Lock in my picks');
@@ -665,15 +747,19 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         picks: Object.assign({}, draft.picks),
         tbA: tbA,
         tbB: tbB,
-        trash: (draft.trash || '').trim().slice(0, 200),
         submittedAt: Date.now(),
         by: wasGuest ? 'host' : 'self'
       });
+      try {
+        var contact = (draft.contact || '').trim().slice(0, 80);
+        if (contact) await db.doc('contacts/' + id).set({ name: name, contact: contact, at: Date.now() });
+        else await db.doc('contacts/' + id).delete();
+      } catch (e) {}
       toast('Entry saved');
       if (wasGuest) {
         guestId = null; resetDraft(); hostTab = 'entries'; location.hash = 'host';
       } else {
-        lsSet('name', name); draft.touched = false;
+        lsSet('name', name); draft.touched = false; draft.contactTouched = false;
       }
     } catch (e) {
       var code = e && e.code;
@@ -716,6 +802,13 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       root.append(note('No entries yet', 'Picks show up here as people submit them.'));
       return root;
     }
+
+    root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Leaderboard view' },
+      [['player', 'By player'], ['question', 'By question']].map(function (t) {
+        return h('button', { type: 'button', text: t[1], 'aria-pressed': String(boardMode === t[0]),
+          onclick: function () { boardMode = t[0]; render(); } });
+      })));
+    if (boardMode === 'question') { root.append(byQuestion(rows)); return root; }
 
     rows.forEach(function (r) {
       var open = expanded.has(r.e.id);
@@ -763,6 +856,38 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       box.append(h('div', { class: 'prow' },
         h('div', { class: 'ptext' }, h('div', { class: 'pq', text: 'Trash talk' }), h('div', { class: 'pa', text: r.e.trash }))));
     }
+    return box;
+  }
+
+  function byQuestion(rows) {
+    var list = qs();
+    var box = h('div', { class: 'stack' });
+    var reveal = isLocked() || results.final || canEdit;
+    if (!reveal) { box.append(note('Picks stay hidden', 'Everyone can compare picks once entries close.')); return box; }
+    if (!bqId || !list.some(function (x) { return x.id === bqId; })) bqId = list[0].id;
+    var q = list.find(function (x) { return x.id === bqId; });
+    var sel = h('select', { id: 'bq-sel', 'aria-label': 'Question', onchange: function (ev) { bqId = ev.target.value; render(); } },
+      list.map(function (x, i) { return h('option', { value: x.id, text: 'Q' + (i + 1) + ': ' + String(x.text).slice(0, 70) }); }));
+    sel.value = bqId;
+    box.append(sel);
+    var a = answerOf(q);
+    var total = rows.length;
+    opts(q).forEach(function (o, oi) {
+      var who = rows.filter(function (r) { return r.e.picks && r.e.picks[q.id] === oi; })
+        .map(function (r) { return r.e.name || 'Unnamed'; }).sort(function (x, y) { return x.localeCompare(y); });
+      var pct = total ? Math.round(who.length / total * 100) : 0;
+      box.append(h('div', { class: 'card stack bq-opt' },
+        h('div', { class: 'toggle' },
+          h('strong', { class: 'name', text: o }),
+          h('span', { class: 'qedit-tools' },
+            a === oi ? h('span', { class: 'tag good', text: 'Correct' }) : null,
+            h('span', { class: 'pts-tag', text: who.length + ' · ' + pct + '%' }))),
+        h('div', { class: 'bar' + (a === oi ? ' good' : '') }, h('i', { style: 'width:' + pct + '%' })),
+        h('div', { class: 'names', text: who.length ? who.join(', ') : 'Nobody' })));
+    });
+    var none = rows.filter(function (r) { return !(r.e.picks && Number.isInteger(r.e.picks[q.id])); }).length;
+    if (none) box.append(h('p', { class: 'hint', text: none + (none === 1 ? ' entry has no pick.' : ' entries have no pick.') }));
+    if (a === null) box.append(h('p', { class: 'hint', text: 'The answer has not been marked yet.' }));
     return box;
   }
 
@@ -898,7 +1023,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('div', { class: 'qhead' },
           h('span', { class: 'qn', text: 'Q' + (qi + 1) }),
           h('span', { class: 'pts-tag', text: pointsOf(q) + (pointsOf(q) === 1 ? ' pt' : ' pts') })),
-        h('div', { class: 'qrow' }, qIcon(q), h('p', { class: 'qtext', text: q.text })),
+        qBlock(q, null),
         h('div', { class: 'opts' }, opts(q).map(function (o, oi) {
           return h('button', { class: 'chip', type: 'button', text: o, 'aria-pressed': String(a === oi),
             onclick: function () { setAnswer(q.id, a === oi ? null : oi); } });
@@ -932,7 +1057,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       tiebreak: (game && game.tiebreak) || '',
       teamA: (game && game.teamA) || 'Team A',
       teamB: (game && game.teamB) || 'Team B',
-      trashPrompt: (game && game.trashPrompt) || '',
       qs: qs().map(function (q) {
         return { id: q.id, text: q.text, options: opts(q).join('\n'), points: pointsOf(q) };
       }),
@@ -976,12 +1100,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
             oninput: function (ev) { edit.teamA = ev.target.value; edit.dirty = true; } })),
         h('label', { class: 'lbl', for: 'e-tb' }, 'Team B name',
           h('input', { type: 'text', id: 'e-tb', maxLength: 24, value: edit.teamB,
-            oninput: function (ev) { edit.teamB = ev.target.value; edit.dirty = true; } }))),
-      h('label', { class: 'lbl', for: 'e-trash' }, 'Trash talk question',
-        h('small', { text: 'Optional text answer, not scored. Leave blank to use the default wording.' }),
-        h('input', { type: 'text', id: 'e-trash', maxLength: 120, value: edit.trashPrompt,
-          placeholder: 'Trash talk: what do you want to say to the rest of the pool?',
-          oninput: function (ev) { edit.trashPrompt = ev.target.value; edit.dirty = true; } }))));
+            oninput: function (ev) { edit.teamB = ev.target.value; edit.dirty = true; } })))));
 
     edit.qs.forEach(function (q, i) {
       var move = function (d) {
@@ -1008,7 +1127,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
             oninput: function (ev) { q.options = ev.target.value; edit.dirty = true; } })),
         h('label', { class: 'lbl', for: 'e-' + q.id + '-p' }, 'Points',
           h('input', { type: 'number', id: 'e-' + q.id + '-p', inputMode: 'numeric', min: '1', max: '20', value: String(q.points),
-            oninput: function (ev) { q.points = ev.target.value; edit.dirty = true; } }))));
+            oninput: function (ev) { q.points = ev.target.value; edit.dirty = true; } })),
+        qPhotoEditor(q)));
     });
 
     box.append(h('div', { class: 'submit' },
@@ -1020,7 +1140,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
     box.append(h('div', { class: 'card stack' },
       h('label', { class: 'lbl', for: 'e-vname' }, 'Save this setup as a version',
-        h('small', { text: 'Keeps the saved questions, teams, wording and intro, not entries or answers. Start a new pool from it on the All pools page. Save your questions first.' }),
+        h('small', { text: 'Keeps the saved questions, photos, teams, intro and Hall of Fame, not entries or answers. Start a new pool from it on the All pools page. Save your questions first.' }),
         h('input', { type: 'text', id: 'e-vname', maxLength: 60, value: versionName, placeholder: 'Super Bowl 2027 setup',
           oninput: function (ev) { versionName = ev.target.value; } })),
       h('div', { class: 'submit' }, h('button', { class: 'btn ghost', type: 'button', text: 'Save version', onclick: saveVersion }))));
@@ -1043,15 +1163,33 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       tiebreak: edit.tiebreak.trim(),
       teamA: edit.teamA.trim() || 'Team A',
       teamB: edit.teamB.trim() || 'Team B',
-      trashPrompt: edit.trashPrompt.trim(),
       questions: out,
       sample: false
     });
     if (ok) {
       var newName = edit.title.trim() || 'Super Bowl Pool';
       if (rootDb && pid) rootDb.doc('index/' + pid).update({ name: newName }).then(null, function () {});
+      Object.keys(qimgs).forEach(function (id) {
+        if (!out.some(function (q) { return q.id === id; })) db.doc('qimg/' + id).delete().then(null, function () {});
+      });
       edit = null; toast('Saved'); render();
     }
+  }
+
+  function contactLists() {
+    var emails = [], phones = [], all = [];
+    entries.forEach(function (e) {
+      var c = contactMap[e.id];
+      if (!c || !c.contact) return;
+      var v = String(c.contact).trim();
+      all.push((e.name || 'Unnamed') + ' - ' + v);
+      (v.indexOf('@') >= 0 ? emails : phones).push(v);
+    });
+    return { emails: emails, phones: phones, all: all };
+  }
+  function copyText(text, msg) {
+    try { navigator.clipboard.writeText(text).then(function () { toast(msg); }, function () { toast('Copy failed.'); }); }
+    catch (e) { toast('Copy failed.'); }
   }
 
   function hostEntries() {
@@ -1064,13 +1202,26 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         draft = { name: '', picks: {}, tiebreak: '', touched: true };
         location.hash = 'entry'; readHash(); render();
       } }) : null));
+    var cl = contactLists();
+    if (list.length) {
+      box.append(h('div', { class: 'card stack' },
+        h('div', { class: 'lbl' }, 'Contacts',
+          h('small', { text: cl.all.length
+            ? cl.all.length + (cl.all.length === 1 ? ' person' : ' people') + ' shared an email or phone. Only you can see these.'
+            : 'Nobody has shared an email or phone yet. Only you can see them when they do.' })),
+        cl.all.length ? h('div', { class: 'qedit-tools' },
+          cl.emails.length ? h('button', { class: 'btn ghost small', type: 'button', text: 'Copy emails (' + cl.emails.length + ')', onclick: function () { copyText(cl.emails.join(', '), 'Emails copied'); } }) : null,
+          cl.phones.length ? h('button', { class: 'btn ghost small', type: 'button', text: 'Copy phones (' + cl.phones.length + ')', onclick: function () { copyText(cl.phones.join(', '), 'Phone numbers copied'); } }) : null,
+          h('button', { class: 'btn ghost small', type: 'button', text: 'Copy names + contacts', onclick: function () { copyText(cl.all.join('\n'), 'Copied'); } })) : null));
+    }
     if (!list.length) box.append(note('No entries yet', 'Share the site link. Nobody needs an account to enter.'));
     list.forEach(function (e) {
       var confirming = confirmId === e.id;
       box.append(h('div', { class: 'card entry-row' },
         h('div', { class: 'ptext' },
           h('span', { class: 'name', text: e.name || 'Unnamed' }),
-          e.by === 'host' ? h('span', { class: 'hint', text: 'Entered by you' }) : null),
+          e.by === 'host' ? h('span', { class: 'hint', text: 'Entered by you' }) : null,
+          contactMap[e.id] && contactMap[e.id].contact ? h('span', { class: 'hint', text: contactMap[e.id].contact }) : null),
         isOwner ? h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm remove' : 'Remove',
           onclick: function () {
             if (!confirming) {
@@ -1079,6 +1230,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
               render(); return;
             }
             confirmId = null;
+            db.doc('contacts/' + e.id).delete().then(null, function () {});
             db.doc('entries/' + e.id).delete().then(function () { toast('Entry removed'); }, function () { toast("Couldn't remove that entry."); });
             render();
           } }) : null));
@@ -1134,22 +1286,37 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var id = newPoolId();
     var g = { title: name, locked: false, tiebreak: 'Tiebreaker: predict the final score', teamA: 'Team A', teamB: 'Team B', questions: [] };
     var introText = '';
+    var extra = {};
     var srcKey = poolForm.source;
     try {
       if (srcKey.indexOf('p:') === 0) {
-        var pidSrc = srcKey.slice(2);
-        var sg = await rootDb.doc('pools/' + pidSrc + '/config/game').get();
-        var si = await rootDb.doc('pools/' + pidSrc + '/config/intro').get();
+        var src = srcKey.slice(2);
+        var base = 'pools/' + src + '/';
+        var sg = await rootDb.doc(base + 'config/game').get();
+        var si = await rootDb.doc(base + 'config/intro').get();
         if (sg.exists) g = cloneGame(sg.data(), name);
         introText = si.exists ? (si.data().text || '') : '';
+        var names = ['qimg', 'config/trophy', 'hof', 'hofResults'];
+        for (var k = 0; k < names.length; k++) {
+          var sn = await rootDb.doc(base + names[k]).get();
+          if (sn.exists) extra[names[k]] = sn.data();
+        }
       } else if (srcKey.indexOf('v:') === 0) {
         var v = versionList.find(function (x) { return x.id === srcKey.slice(2); });
-        if (v) { g = cloneGame(v.game, name); introText = v.intro || ''; }
+        if (v) {
+          g = cloneGame(v.game, name); introText = v.intro || '';
+          if (v.qimg) extra['qimg'] = v.qimg;
+          if (v.trophy) extra['config/trophy'] = v.trophy;
+          if (v.hof) extra['hof'] = v.hof;
+          if (v.hofResults) extra['hofResults'] = v.hofResults;
+        }
       }
     } catch (e) { toast("Couldn't read that pool to copy it."); return; }
     var ok = await enqueue(async function () {
       await rootDb.doc('pools/' + id + '/config/game').set(g);
       if (introText) await rootDb.doc('pools/' + id + '/config/intro').set({ text: introText, at: Date.now() });
+      var keys = Object.keys(extra);
+      for (var i = 0; i < keys.length; i++) await rootDb.doc('pools/' + id + '/' + keys[i]).set(extra[keys[i]]);
       await rootDb.doc('index/' + id).set({ name: name, createdAt: Date.now(), archived: false });
     });
     if (ok) { poolForm.name = ''; poolForm.source = 'blank'; toast('Pool created'); render(); }
@@ -1161,8 +1328,18 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!game) { toast('Save your questions first.'); return; }
     var name = (versionName || '').trim() || ((game.title || 'Pool') + ' ' + dateStr(Date.now()));
     var id = 'v' + Date.now().toString(36);
+    var qm = {};
+    Object.keys(qimgs).forEach(function (k) { qm[k] = { img: qimgs[k] }; });
+    var hm = {};
+    fameList.forEach(function (w) { var c = Object.assign({}, w); delete c.id; hm[w.id] = c; });
+    var hr = null;
+    try { var sr = await db.doc('hofResults').get(); hr = sr.exists ? sr.data() : null; } catch (e) {}
     var ok = await enqueue(function () {
-      return rootDb.doc('versions/' + id).set({ name: name, savedAt: Date.now(), game: cloneGame(game), intro: (intro && intro.text) || '' });
+      return rootDb.doc('versions/' + id).set({
+        name: name, savedAt: Date.now(), game: cloneGame(game), intro: (intro && intro.text) || '',
+        qimg: Object.keys(qm).length ? qm : null, trophy: trophy ? { img: trophy } : null,
+        hof: Object.keys(hm).length ? hm : null, hofResults: hr
+      });
     });
     if (ok) { versionName = ''; toast('Version saved'); render(); }
   }
@@ -1211,7 +1388,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('input', { type: 'text', id: 'np-name', maxLength: 60, value: poolForm.name, placeholder: 'Super Bowl 2027',
           oninput: function (ev) { poolForm.name = ev.target.value; } })),
       h('label', { class: 'lbl', for: 'np-src' }, 'Start from',
-        h('small', { text: 'A copy brings the questions, team names and intro. It never brings entries, answers or chat.' }), sel),
+        h('small', { text: 'A copy brings the questions, photos, team names, intro, trophy picture and Hall of Fame. It never brings entries, answers or chat.' }), sel),
       h('div', { class: 'submit' }, h('button', { class: 'btn', type: 'submit', text: 'Create pool' }))));
 
     if (!poolsLoaded) root.append(note('Loading pools', 'One moment.'));
@@ -1253,42 +1430,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     return root;
   }
 
-  /* ---------- co-hosts ---------- */
-
-  function hostsCard() {
-    var root = h('div', { class: 'card stack' });
-    var input = h('input', { type: 'email', id: 'host-email', autocomplete: 'off', placeholder: 'name@gmail.com', style: 'flex:1 1 200px' });
-    root.append(h('label', { class: 'lbl', for: 'host-email' }, 'Co-hosts',
-      h('small', { text: 'A co-host signs in with Google using the email you add here. Co-hosts can score, lock entries, edit setup and run pools. Only you can add or remove them.' })));
-    root.append(h('div', { class: 'prow' },
-      h('div', { class: 'ptext' }, h('div', { class: 'pa', text: HOST_EMAIL }), h('div', { class: 'pq', text: 'You (owner)' }))));
-    adminList.slice().sort(function (a, b) { return String(a.email || a.id).localeCompare(String(b.email || b.id)); }).forEach(function (a) {
-      var key = 'a:' + a.id;
-      var confirming = confirmId === key;
-      root.append(h('div', { class: 'prow' },
-        h('div', { class: 'ptext' }, h('div', { class: 'pa', text: a.email || a.id }), h('div', { class: 'pq', text: 'Co-host' })),
-        h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm remove' : 'Remove', onclick: function () {
-          if (!confirming) {
-            confirmId = key; clearTimeout(confirmTimer);
-            confirmTimer = setTimeout(function () { confirmId = null; render(); }, 4000);
-            render(); return;
-          }
-          confirmId = null;
-          rootDb.doc('admins/' + a.id).delete().then(function () { toast('Co-host removed'); }, function () { toast("Couldn't remove that co-host."); });
-          render();
-        } })));
-    });
-    root.append(h('div', { class: 'qedit-tools' }, input,
-      h('button', { class: 'btn small', type: 'button', text: 'Add co-host', onclick: function () {
-        var v = input.value.trim().toLowerCase();
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast('Enter a full email address.'); return; }
-        if (v === HOST_EMAIL_L) { toast("That's you already."); return; }
-        enqueue(function () { return rootDb.doc('admins/' + emailKey(v)).set({ email: v, addedAt: Date.now() }); })
-          .then(function (ok) { if (ok) { input.value = ''; toast('Co-host added'); } });
-      } })));
-    return root;
-  }
-
   /* ---------- hall of fame ---------- */
 
   function addFame() {
@@ -1296,47 +1437,212 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var name = (fameForm.name || '').trim();
     if (!(year >= 1960 && year <= 2200) || !name) { toast('Add a year and a winner name.'); return; }
     var id = 'h' + year + '-' + Date.now().toString(36);
-    enqueue(function () { return rootDb.doc('halloffame/' + id).set({ year: year, name: name.slice(0, 60), addedAt: Date.now() }); })
-      .then(function (ok) { if (ok) { fameForm = { year: '', name: '' }; toast('Winner added'); render(); } });
+    var d = { year: year, name: name.slice(0, 60), addedAt: Date.now() };
+    if (fameForm.photo) d.photo = fameForm.photo;
+    enqueue(function () { return db.doc('hof/' + id).set(d); })
+      .then(function (ok) { if (ok) { fameForm = { year: '', name: '', photo: '' }; toast('Winner added'); render(); } });
+  }
+  function buildSnapshot() {
+    var rows = ranked();
+    return {
+      at: Date.now(),
+      title: (game && game.title) || 'Super Bowl Pool',
+      teamA: teamA(), teamB: teamB(),
+      tiebreak: (game && game.tiebreak) || '',
+      tbA: typeof results.tbA === 'number' ? results.tbA : null,
+      tbB: typeof results.tbB === 'number' ? results.tbB : null,
+      questions: qs().map(function (q) {
+        return { id: q.id, text: q.text, options: opts(q).slice(), points: pointsOf(q), answer: answerOf(q) };
+      }),
+      board: rows.map(function (r) {
+        return {
+          name: r.e.name || 'Unnamed', pts: r.pts, rank: r.rank, tied: !!r.tied,
+          picks: Object.assign({}, r.e.picks || {}),
+          tbA: typeof r.e.tbA === 'number' ? r.e.tbA : null,
+          tbB: typeof r.e.tbB === 'number' ? r.e.tbB : null
+        };
+      })
+    };
   }
   function addWinnerToFame(w) {
     var name = w.map(function (r) { return r.e.name || 'Unnamed'; }).join(' & ');
-    enqueue(function () {
-      return rootDb.doc('halloffame/p_' + pid).set({ year: new Date().getFullYear(), name: name, pool: pid, addedAt: Date.now() });
-    }).then(function (ok) { if (ok) toast('Added to the Hall of Fame'); });
+    var snap = buildSnapshot();
+    var id = 'p_' + pid;
+    enqueue(async function () {
+      await db.doc('hofResults/' + id).set(snap);
+      await db.doc('hof/' + id).update({ year: new Date().getFullYear(), name: name, pool: pid, hasResults: true, addedAt: Date.now() });
+    }).then(function (ok) { if (ok) { delete fameData[id]; toast('Added to the Hall of Fame'); } });
   }
+  function loadFameData(id) {
+    if (fameData[id] !== undefined) return;
+    fameData[id] = null;
+    db.doc('hofResults/' + id).get().then(function (s) {
+      fameData[id] = s.exists ? s.data() : false; renderSoon();
+    }, function () { fameData[id] = false; renderSoon(); });
+  }
+  function loadLegacy() {
+    if (legacyFame !== undefined || !canEdit || !rootDb) return;
+    legacyFame = null;
+    rootDb.doc('halloffame').get().then(function (s) {
+      var v = s.exists ? s.data() : null;
+      legacyFame = v && Object.keys(v).length ? v : null;
+      renderSoon();
+    }, function () { legacyFame = null; });
+  }
+  function legacyEligible() {
+    var out = {};
+    Object.keys(legacyFame || {}).forEach(function (k) {
+      var v = legacyFame[k];
+      if (!v || typeof v !== 'object' || !v.name) return;
+      if (v.pool && v.pool !== pid) return;
+      out[k] = v;
+    });
+    return out;
+  }
+  function copyLegacyFame() {
+    var map = legacyEligible();
+    if (!Object.keys(map).length) return;
+    enqueue(function () { return db.doc('hof').update(map); }).then(function (ok) { if (ok) toast('Hall of Fame copied here'); });
+  }
+  async function setWinnerPhoto(id, file) {
+    try {
+      var img = await fileToDataUrl(file, 360, 90000);
+      var ok = await enqueue(function () { return db.doc('hof/' + id).update({ photo: img }); });
+      if (ok) toast('Photo saved');
+    } catch (e) { badPhoto(); }
+  }
+  function removeWinnerPhoto(id) {
+    enqueue(function () { return db.doc('hof/' + id).update({ photo: null }); }).then(function (ok) { if (ok) toast('Photo removed'); });
+  }
+  async function setTrophy(file) {
+    try {
+      var img = await fileToDataUrl(file, 900, 200000);
+      var ok = await enqueue(function () { return db.doc('config/trophy').set({ img: img, at: Date.now() }); });
+      if (ok) toast('Trophy photo saved');
+    } catch (e) { badPhoto(); }
+  }
+  function resetTrophy() {
+    enqueue(function () { return db.doc('config/trophy').delete(); }).then(function (ok) { if (ok) toast('Trophy photo reset'); });
+  }
+  function showPhoto(w) {
+    var box = h('div', { class: 'lightbox', role: 'dialog', 'aria-label': 'Photo of ' + (w.name || 'winner') });
+    function onKey(ev) { if (ev.key === 'Escape') close(); }
+    function close() { box.remove(); document.removeEventListener('keydown', onKey); }
+    document.addEventListener('keydown', onKey);
+    box.append(
+      h('img', { src: w.photo, alt: w.name || '' }),
+      h('div', { class: 'cap', text: (w.year ? w.year + ': ' : '') + (w.name || '') }),
+      h('button', { class: 'btn small', type: 'button', text: 'Close', onclick: close }));
+    box.addEventListener('click', function (ev) { if (ev.target === box) close(); });
+    document.body.append(box);
+  }
+
+  function snapDetail(snap, r) {
+    var box = h('div', { class: 'detail' });
+    var picks = r.picks || {};
+    arr(snap.questions).forEach(function (q) {
+      var pick = picks[q.id];
+      var a = Number.isInteger(q.answer) ? q.answer : null;
+      var label = Number.isInteger(pick) ? (arr(q.options)[pick] || '—') : 'No pick';
+      var st = a === null ? ['wait', 'Not scored'] : pick === a ? ['good', 'Correct'] : ['bad', 'Missed'];
+      box.append(h('div', { class: 'prow' },
+        h('div', { class: 'ptext' }, h('div', { class: 'pq', text: q.text }), h('div', { class: 'pa', text: label })),
+        h('span', { class: 'tag ' + st[0], text: st[1] })));
+    });
+    if (snap.tiebreak && typeof r.tbA === 'number' && typeof r.tbB === 'number') {
+      box.append(h('div', { class: 'prow' },
+        h('div', { class: 'ptext' }, h('div', { class: 'pq', text: snap.tiebreak }),
+          h('div', { class: 'pa', text: (snap.teamA || 'Team A') + ' ' + r.tbA + ' · ' + (snap.teamB || 'Team B') + ' ' + r.tbB }))));
+    }
+    return box;
+  }
+  function fameResults(w) {
+    var snap = fameData[w.id];
+    var box = h('div', { class: 'fame-res' });
+    if (snap === undefined || snap === null) { box.append(note('Loading results', 'One moment.')); return box; }
+    if (snap === false) { box.append(note('No saved results', 'Results were not saved for this winner.')); return box; }
+    var score = typeof snap.tbA === 'number' && typeof snap.tbB === 'number'
+      ? ' · Final score: ' + (snap.teamA || 'Team A') + ' ' + snap.tbA + ', ' + (snap.teamB || 'Team B') + ' ' + snap.tbB : '';
+    box.append(h('p', { class: 'status', text: (snap.title || 'Final standings') + score }));
+    arr(snap.board).forEach(function (r, ri) {
+      var k = w.id + ':' + ri;
+      var open = fameEntryOpen.has(k);
+      box.append(h('button', { class: 'row' + (r.rank === 1 ? ' lead' : ''), type: 'button', 'aria-expanded': String(open),
+        onclick: function () { if (open) fameEntryOpen.delete(k); else fameEntryOpen.add(k); render(); } },
+        h('span', { class: 'rank', text: (r.tied ? 'T' : '') + r.rank }),
+        h('span', { class: 'name', text: r.name || 'Unnamed' }),
+        h('span', { class: 'pts' }, String(r.pts), h('small', { text: 'pts' }))));
+      if (open) box.append(snapDetail(snap, r));
+    });
+    return box;
+  }
+
   function renderFame() {
     if (!db) return noAccess();
+    loadLegacy();
     var root = h('div', { class: 'stack' });
-    root.append(h('div', { class: 'fame-hero' },
-      h('img', { src: TROPHY_SRC, alt: 'The MicMunch trophy for football prop bet excellence' })));
+    var hero = h('div', { class: 'fame-hero' },
+      h('img', { src: trophy || TROPHY_SRC, alt: 'The MicMunch trophy for football prop bet excellence' }));
+    if (canEdit) {
+      hero.append(h('div', { class: 'qedit-tools' },
+        fileBtn('Change trophy photo', setTrophy),
+        trophy ? h('button', { class: 'btn ghost small', type: 'button', text: 'Reset', onclick: resetTrophy }) : null));
+    }
+    root.append(hero);
     var list = fameList.slice().sort(function (a, b) {
       return (Number(b.year) || 0) - (Number(a.year) || 0) || String(a.name).localeCompare(String(b.name));
     });
     if (!fameLoaded) root.append(loadingNote());
     else if (!list.length) root.append(note('No winners yet', 'The first champion gets added here.'));
     else root.append(h('div', { class: 'eyebrow', text: 'Previous winners' }));
+    if (canEdit && fameLoaded && !list.length && legacyFame) {
+      var n = Object.keys(legacyEligible()).length;
+      if (n) {
+        root.append(h('div', { class: 'card stack' },
+          h('div', { class: 'lbl', text: 'Bring over your old Hall of Fame' },
+            h('small', { text: 'Your earlier shared winners list has ' + n + (n === 1 ? ' winner' : ' winners') + '. Copy it into this pool. You can edit it afterward.' })),
+          h('div', { class: 'submit' }, h('button', { class: 'btn small', type: 'button', text: 'Copy old winners here', onclick: copyLegacyFame }))));
+      }
+    }
     var wins = {};
     list.forEach(function (w) { var k = String(w.name || '').trim().toLowerCase(); wins[k] = (wins[k] || 0) + 1; });
     list.forEach(function (w, i) {
       var k = String(w.name || '').trim().toLowerCase();
       var key = 'f:' + w.id;
       var confirming = confirmId === key;
-      root.append(h('div', { class: 'fame-row' + (i === 0 ? ' lead' : '') },
+      var open = fameOpen.has(w.id);
+      var item = h('div', { class: 'fame-item' });
+      var avatar = w.photo
+        ? h('button', { class: 'avatar', type: 'button', 'aria-label': 'View photo of ' + (w.name || 'winner'), onclick: function () { showPhoto(w); } }, h('img', { src: w.photo, alt: '' }))
+        : h('span', { class: 'avatar plain', 'aria-hidden': 'true' }, iconEl('trophy'));
+      item.append(h('div', { class: 'fame-row' + (i === 0 ? ' lead' : '') },
         h('span', { class: 'yr', text: String(w.year || '') }),
+        avatar,
         h('span', { class: 'name', text: w.name || '' }),
-        h('span', { class: 'fame-end' },
-          wins[k] > 1 ? h('span', { class: 'tag gold', text: wins[k] + ' wins' }) : null,
-          canEdit ? h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm' : 'Remove', onclick: function () {
-            if (!confirming) {
-              confirmId = key; clearTimeout(confirmTimer);
-              confirmTimer = setTimeout(function () { confirmId = null; render(); }, 4000);
-              render(); return;
-            }
-            confirmId = null;
-            rootDb.doc('halloffame/' + w.id).delete().then(function () { toast('Winner removed'); }, function () { toast("Couldn't remove that winner."); });
-            render();
-          } }) : null)));
+        h('span', { class: 'fame-end' }, wins[k] > 1 ? h('span', { class: 'tag gold', text: wins[k] + ' wins' }) : null)));
+      var tools = [];
+      if (w.hasResults) {
+        tools.push(h('button', { class: 'btn ghost small', type: 'button', 'aria-expanded': String(open), text: open ? 'Hide results' : 'View results',
+          onclick: function () { if (open) fameOpen.delete(w.id); else { fameOpen.add(w.id); loadFameData(w.id); } render(); } }));
+      }
+      if (canEdit) {
+        tools.push(fileBtn(w.photo ? 'Change photo' : 'Add photo', function (f) { setWinnerPhoto(w.id, f); }));
+        if (w.photo) tools.push(h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () { removeWinnerPhoto(w.id); } }));
+        tools.push(h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm' : 'Remove', onclick: function () {
+          if (!confirming) {
+            confirmId = key; clearTimeout(confirmTimer);
+            confirmTimer = setTimeout(function () { confirmId = null; render(); }, 4000);
+            render(); return;
+          }
+          confirmId = null;
+          db.doc('hofResults/' + w.id).delete().then(null, function () {});
+          db.doc('hof/' + w.id).delete().then(function () { toast('Winner removed'); }, function () { toast("Couldn't remove that winner."); });
+          render();
+        } }));
+      }
+      if (tools.length) item.append(h('div', { class: 'qedit-tools fame-tools' }, tools));
+      if (open) item.append(fameResults(w));
+      root.append(item);
     });
     if (canEdit) {
       root.append(h('form', { class: 'card stack', onsubmit: function (ev) { ev.preventDefault(); addFame(); } },
@@ -1348,6 +1654,11 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           h('label', { class: 'lbl', for: 'fame-name' }, 'Winner',
             h('input', { type: 'text', id: 'fame-name', maxLength: 60, value: fameForm.name,
               oninput: function (ev) { fameForm.name = ev.target.value; } }))),
+        h('div', { class: 'qedit-tools' },
+          fileBtn(fameForm.photo ? 'Change photo' : 'Add photo (optional)', async function (f) {
+            try { fameForm.photo = await fileToDataUrl(f, 360, 90000); render(); } catch (e) { badPhoto(); }
+          }),
+          fameForm.photo ? h('span', { class: 'avatar plain' }, h('img', { src: fameForm.photo, alt: 'Chosen photo' })) : null),
         h('div', { class: 'submit' }, h('button', { class: 'btn', type: 'submit', text: 'Add winner' }))));
     }
     return root;
@@ -1392,9 +1703,26 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   async function hostSignOut() {
     try { await rootDb.doc('hostSessions/' + auth.currentUser.uid).delete(); } catch (e) {}
-    hostSubs = false;
+    hostSubs = false; contactSubs = false; contactMap = {}; legacyFame = undefined;
     poolList = []; versionList = []; poolsLoaded = false;
     await applyUser(auth.currentUser);
+  }
+  function startPoolHostSubs() {
+    if (contactSubs || !db || !pid) return;
+    contactSubs = true;
+    db.collection('contacts').onSnapshot(function (s) {
+      contactMap = {};
+      s.docs.forEach(function (d) { contactMap[d.id] = d.data(); });
+      renderSoon();
+    }, function () {});
+  }
+  function loadMyContact() {
+    var id = guestId || uid;
+    if (!id || !db || !pid || contactLoadedFor === id || draft.contactTouched) return;
+    contactLoadedFor = id;
+    db.doc('contacts/' + id).get().then(function (s) {
+      if (s.exists && !draft.contactTouched) { draft.contact = (s.data() || {}).contact || ''; renderSoon(); }
+    }, function () {});
   }
   async function applyUser(u) {
     uid = u ? u.uid : null;
@@ -1402,7 +1730,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     isMaster = false;
     isOwner = canEdit = host;
     canWrite = true;
-    if (host) startHostSubs();
+    if (host) { startHostSubs(); startPoolHostSubs(); }
+    loadMyContact();
     readHash();
     syncDraft();
     render();
@@ -1424,12 +1753,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       }
       applyUser(u);
     });
-
-    rootDb.collection('halloffame').onSnapshot(function (s) {
-      fameList = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-      fameLoaded = true;
-      renderSoon();
-    }, function () { fameLoaded = true; renderSoon(); });
 
     if (!pid) return;
 
@@ -1458,6 +1781,21 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       renderSoon();
     }, onErr);
     render();
+    db.collection('hof').onSnapshot(function (s) {
+      fameList = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      fameLoaded = true;
+      renderSoon();
+    }, function () { fameLoaded = true; renderSoon(); });
+    db.collection('qimg').onSnapshot(function (s) {
+      qimgs = {};
+      s.docs.forEach(function (d) { var v = d.data(); if (v && v.img) qimgs[d.id] = v.img; });
+      renderSoon();
+    }, function () {});
+    db.doc('config/trophy').onSnapshot(function (s) {
+      var v = s.exists ? s.data() : null;
+      trophy = v && v.img ? v.img : null;
+      renderSoon();
+    }, function () {});
     db.doc('config/intro').onSnapshot(function (s) {
       intro = s.exists ? s.data() : null;
       loaded.intro = true;
