@@ -66,8 +66,9 @@ h1{margin:6px 0 2px;font:800 clamp(36px,10vw,56px)/.92 var(--display);text-trans
 .banner.win{display:grid;gap:4px;background:var(--accent-bg);border:2px solid var(--accent);padding:16px}
 .winname{font:800 clamp(30px,9vw,44px)/1 var(--display);text-transform:uppercase;overflow-wrap:anywhere}
 label.lbl{display:grid;gap:6px;font-weight:600}
-label.lbl small,.hint{font-weight:400;color:var(--ink-2);font-size:14px}
-input[type="text"],input[type="number"],input[type="email"],input[type="datetime-local"],select,textarea{width:100%;min-height:46px;padding:10px 12px;font:inherit;color:var(--ink);background:var(--surface);border:2px solid var(--line);border-radius:8px}
+div.lbl{display:grid;gap:6px;font-weight:600}
+label.lbl small,div.lbl small,.hint{font-weight:400;color:var(--ink-2);font-size:14px}
+input[type="text"],input[type="number"],input[type="email"],input[type="tel"],input[type="datetime-local"],select,textarea{width:100%;min-height:46px;padding:10px 12px;font:inherit;color:var(--ink);background:var(--surface);border:2px solid var(--line);border-radius:8px}
 textarea{resize:vertical;line-height:1.35}
 input:disabled{opacity:.7}
 .yard{--p:0;position:relative;height:30px;border-radius:6px;overflow:hidden;background-color:var(--turf);background-image:repeating-linear-gradient(90deg,var(--hash) 0 2px,transparent 2px 10%)}
@@ -154,7 +155,7 @@ input:disabled{opacity:.7}
 .tag.gold{background:var(--accent-bg);color:var(--ink);border:1px solid var(--accent)}
 .banner.win .btn{justify-self:start}
 a.linkbtn{display:inline-block}
-@media (max-width:440px){.tabs a{padding:12px 9px;font-size:16px;letter-spacing:.02em}}
+@media (max-width:440px){.tabs a{padding:12px 9px;font-size:16px;letter-spacing:.02em}.seg button,.seg a{font-size:15px;padding:8px 6px}}
 .foot{margin-top:32px;text-align:center}
 .linkbtn{background:none;border:0;color:var(--ink-2);font:inherit;font-size:13px;text-decoration:underline;padding:12px;cursor:pointer}
 .qphoto{display:block;width:100%;max-height:260px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
@@ -174,6 +175,21 @@ a.linkbtn{display:inline-block}
 .bar i{display:block;height:100%;background:var(--ink-2)}
 .bar.good i{background:var(--good)}
 .names{font-size:14px;color:var(--ink-2);overflow-wrap:anywhere}
+.seg a{flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 10px;border:2px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:700 17px/1 var(--display);letter-spacing:.05em;text-transform:uppercase;text-decoration:none}
+.yard b.ic{width:26px;height:26px;border-radius:0;background:none}
+.yard b.ic::after{display:none}
+.yard b.ic svg{display:block;width:26px;height:26px}
+.swatch{width:44px;height:44px;padding:0;border-radius:50%;border:3px solid var(--line);cursor:pointer}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 3px var(--surface)}
+.iconpick{display:inline-flex;width:48px;height:48px;padding:6px;border:2px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer}
+.iconpick[aria-pressed="true"]{border-color:var(--ink);background:var(--accent-bg)}
+.iconpick svg{width:100%;height:100%}
+.who{display:flex;align-items:center;gap:10px;min-width:0}
+.mini{flex:none;width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid var(--line);background:var(--accent-bg);display:inline-flex;align-items:center;justify-content:center;font:800 15px/1 var(--display);color:var(--ink);text-transform:uppercase}
+.mini.sm{width:24px;height:24px;font-size:12px}
+.mini.big{width:56px;height:56px;font-size:22px}
+.fame-row.tap{cursor:pointer}
+.chev{color:var(--ink-2);font-size:18px;line-height:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -388,6 +404,59 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         img ? h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () { removeQPhoto(q.id); } }) : null));
   }
 
+  /* ---------- progress bar look ---------- */
+  var BAR_COLORS = {
+    turf: ['#2F7D52', '#5DB382', 'Green'], navy: ['#1F3A68', '#6F95D6', 'Navy'], red: ['#B8322A', '#E8837B', 'Red'],
+    purple: ['#5B3A8C', '#A58BD6', 'Purple'], gold: ['#A87800', '#E8B62C', 'Gold'], teal: ['#13808A', '#5CC4CC', 'Teal'], black: ['#1B1B1F', '#7A7F90', 'Black']
+  };
+  var BAR_ICONS = {
+    football: ['Football', '<ellipse cx="12" cy="12" rx="10" ry="6" fill="#8A4B24" stroke="#13203A" stroke-width="1.5" transform="rotate(-30 12 12)"/><path d="M8.5 14.2l7-4.4M10.6 10.6l1 1.7M13.2 9l1 1.7M7.6 12.8l.9 1.6" stroke="#fff" stroke-width="1.3" stroke-linecap="round" fill="none"/>'],
+    trophy: ['Trophy', '<path d="M7 3h10v5a5 5 0 0 1-10 0z" fill="#F2B705" stroke="#13203A" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 5H3.5a3.5 3.5 0 0 0 3.6 4M17 5h3.5a3.5 3.5 0 0 1-3.6 4" fill="none" stroke="#13203A" stroke-width="1.5"/><path d="M12 13v4M8 21h8M9 17h6v4H9z" fill="#F2B705" stroke="#13203A" stroke-width="1.5" stroke-linejoin="round"/>'],
+    helmet: ['Helmet', '<path d="M3 13a9 8 0 0 1 17-3l1 6H10c-4 0-7-1-7-3z" fill="#3566C9" stroke="#13203A" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 14h9M14 14v4M18 14v3" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>'],
+    diamond: ['Diamond', '<path d="M12 2l9 10-9 10-9-10z" fill="#5BC0EB" stroke="#13203A" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 12h18M12 2l-4 10 4 10 4-10z" fill="none" stroke="#13203A" stroke-width="1"/>'],
+    star: ['Star', '<path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.2-5.9 3.2 1.2-6.5L2.5 9.4l6.6-.9z" fill="#F2B705" stroke="#13203A" stroke-width="1.5" stroke-linejoin="round"/>']
+  };
+  function iconSvg(key) { return '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' + BAR_ICONS[key][1] + '</svg>'; }
+  function yardEl(prog) {
+    var c = BAR_COLORS[game && game.barColor] || BAR_COLORS.turf;
+    var key = BAR_ICONS[game && game.barIcon] ? game.barIcon : 'football';
+    var b = h('b');
+    if (key !== 'football') { b.className = 'ic'; b.innerHTML = iconSvg(key); }
+    var y = h('div', { class: 'yard', 'aria-hidden': 'true' }, h('i'), b);
+    y.style.setProperty('--turf', c[0]); y.style.setProperty('--turf-lit', c[1]);
+    if (prog != null) y.style.setProperty('--p', prog);
+    return y;
+  }
+  function barCard() {
+    var cur = (game && BAR_COLORS[game.barColor]) ? game.barColor : 'turf';
+    var ic = (game && BAR_ICONS[game.barIcon]) ? game.barIcon : 'football';
+    return h('div', { class: 'card stack' },
+      h('div', { class: 'lbl' }, 'Progress bar', h('small', { text: 'The bar people fill as they answer the questions. Pick its color and icon. It saves right away.' })),
+      yardEl(0.5),
+      h('div', { class: 'qedit-tools', role: 'group', 'aria-label': 'Bar color' }, Object.keys(BAR_COLORS).map(function (k) {
+        return h('button', { class: 'swatch', type: 'button', 'aria-label': BAR_COLORS[k][2], 'aria-pressed': String(cur === k),
+          style: 'background:' + BAR_COLORS[k][0], onclick: function () { saveGame({ barColor: k }); } });
+      })),
+      h('div', { class: 'qedit-tools', role: 'group', 'aria-label': 'Bar icon' }, Object.keys(BAR_ICONS).map(function (k) {
+        var btn = h('button', { class: 'iconpick', type: 'button', 'aria-label': BAR_ICONS[k][0], 'aria-pressed': String(ic === k), onclick: function () { saveGame({ barIcon: k }); } });
+        btn.innerHTML = iconSvg(k);
+        return btn;
+      })));
+  }
+
+  /* ---------- avatars and leaving the form ---------- */
+  function miniAvatar(photo, name, cls) {
+    if (photo) return h('img', { class: 'mini ' + (cls || ''), src: photo, alt: '' });
+    return h('span', { class: 'mini ' + (cls || ''), 'aria-hidden': 'true', text: String(name || '?').trim().charAt(0) || '?' });
+  }
+  function hasUnsaved() {
+    return !!(draft.touched && ((draft.name || '').trim() || Object.keys(draft.picks || {}).length));
+  }
+  function leaveOk() {
+    if (view !== 'entry' || !hasUnsaved()) return true;
+    return window.confirm("You haven't saved your picks yet. Leave without saving?");
+  }
+
   /* ---------- cartoon icons ---------- */
   function eye(x, y, r, dx, dy) {
     return '<circle class="o" cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#fff" style="stroke-width:1.4"/><circle cx="' + (x + (dx || 0)) + '" cy="' + (y + (dy || 0)) + '" r="' + (r * 0.5) + '" fill="#13203A"/>';
@@ -509,6 +578,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       draft.tbA = typeof mine.tbA === 'number' ? String(mine.tbA) : '';
       draft.tbB = typeof mine.tbB === 'number' ? String(mine.tbB) : '';
       draft.trash = mine.trash || '';
+      if (!draft.photoTouched) draft.photo = mine.photo || '';
     }
   }
   function resetDraft() {
@@ -559,7 +629,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (view === 'chat' && latest > chatSeen) { chatSeen = latest; lsSet('chatSeen', String(latest)); }
     var unread = chat.some(function (m) { return (m.ts || 0) > chatSeen && m.uid !== uid; });
     $tabs.replaceChildren.apply($tabs, items.map(function (it) {
-      return h('a', { href: '#' + it[0], 'aria-current': view === it[0] ? 'page' : null },
+      return h('a', { href: '#' + it[0], 'aria-current': view === it[0] ? 'page' : null,
+          onclick: function (ev) { if (it[0] !== view && !leaveOk()) ev.preventDefault(); } },
         it[1], it[0] === 'chat' && unread ? h('span', { class: 'dot', 'aria-label': 'new messages' }) : null);
     }));
   }
@@ -662,7 +733,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         placeholder: 'Shown on the leaderboard', disabled: readOnly,
         oninput: function (ev) { draft.name = ev.target.value; draft.touched = true; meta(); } })));
 
-    var yard = h('div', { class: 'yard', 'aria-hidden': 'true' }, h('i'), h('b'));
+    var yard = yardEl();
     var count = h('span', { class: 'count' });
     root.append(h('div', { class: 'progress' }, yard, count));
 
@@ -695,21 +766,41 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
               oninput: function (ev) { draft.tbB = ev.target.value; draft.touched = true; meta(); } })))));
     }
 
-    root.append(h('label', { class: 'lbl card', for: 'f-contact' }, 'Email or phone (optional)',
-      h('small', { text: "Only the host can see this. It is used to send you next year's link. Leave it blank if you would rather not." }),
-      h('input', { type: 'text', id: 'f-contact', maxLength: 80, autocomplete: 'email', value: draft.contact || '', disabled: readOnly,
-        oninput: function (ev) { draft.contact = ev.target.value; draft.contactTouched = true; draft.touched = true; } })));
+    function cin(id, label, type, max, ac, key) {
+      return h('label', { class: 'lbl', for: id }, label,
+        h('input', { type: type, id: id, maxLength: max, autocomplete: ac, value: draft[key] || '', disabled: readOnly,
+          oninput: function (ev) { draft[key] = ev.target.value; draft.contactTouched = true; draft.touched = true; } }));
+    }
+    root.append(h('div', { class: 'card stack' },
+      h('div', { class: 'lbl' }, 'Contact info (optional)',
+        h('small', { text: "Only the host can see this. It is used to send you next year's link. Leave any of it blank." })),
+      cin('f-fullname', 'Full name', 'text', 60, 'name', 'fullName'),
+      cin('f-email', 'Email', 'email', 80, 'email', 'email'),
+      cin('f-phone', 'Phone', 'tel', 30, 'tel', 'phone')));
 
-    root.append(h('div', { class: 'card' },
-      h('div', { class: 'qrow' }, iconEl('bubble'),
-        h('div', { class: 'stack' },
-          h('p', { class: 'qtext', text: 'Got something to say to the rest of the pool?' }),
-          h('a', { class: 'btn small link', href: '#chat', text: 'Go to Trash Talk' })))));
+    root.append(h('div', { class: 'card stack' },
+      h('div', { class: 'lbl' }, 'Your photo (optional)',
+        h('small', { text: 'Shows next to your name on the leaderboard and in Trash Talk. Everyone in the pool will see it.' })),
+      h('div', { class: 'qedit-tools' },
+        draft.photo ? miniAvatar(draft.photo, draft.name, 'big') : null,
+        readOnly ? null : fileBtn(draft.photo ? 'Change photo' : 'Add photo', async function (f) {
+          try { draft.photo = await fileToDataUrl(f, 160, 30000); draft.photoTouched = true; draft.touched = true; render(); } catch (e) { badPhoto(); }
+        }),
+        draft.photo && !readOnly ? h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () {
+          draft.photo = ''; draft.photoTouched = true; draft.touched = true; render();
+        } }) : null)));
 
     var btn = h('button', { class: 'btn', type: 'button', onclick: submitEntry },
       guestId ? 'Save entry' : mine ? 'Update my picks' : 'Lock in my picks');
     var hint = h('span', { class: 'hint' });
     if (!readOnly) root.append(h('div', { class: 'submit' }, btn, hint));
+
+    root.append(h('div', { class: 'card' },
+      h('div', { class: 'qrow' }, iconEl('bubble'),
+        h('div', { class: 'stack' },
+          h('p', { class: 'qtext', text: 'Got something to say to the rest of the pool?' }),
+          h('a', { class: 'btn small link', href: '#chat', text: 'Go to Trash Talk',
+            onclick: function (ev) { if (!leaveOk()) ev.preventDefault(); } })))));
 
     function meta() {
       var total = list.length;
@@ -747,19 +838,24 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         picks: Object.assign({}, draft.picks),
         tbA: tbA,
         tbB: tbB,
+        photo: draft.photo || null,
         submittedAt: Date.now(),
         by: wasGuest ? 'host' : 'self'
       });
       try {
-        var contact = (draft.contact || '').trim().slice(0, 80);
-        if (contact) await db.doc('contacts/' + id).set({ name: name, contact: contact, at: Date.now() });
+        var ci = { name: name, at: Date.now() };
+        var fn = (draft.fullName || '').trim().slice(0, 60), em = (draft.email || '').trim().slice(0, 80), ph = (draft.phone || '').trim().slice(0, 30);
+        if (fn) ci.fullName = fn;
+        if (em) ci.email = em;
+        if (ph) ci.phone = ph;
+        if (fn || em || ph) await db.doc('contacts/' + id).set(ci);
         else await db.doc('contacts/' + id).delete();
       } catch (e) {}
       toast('Entry saved');
       if (wasGuest) {
         guestId = null; resetDraft(); hostTab = 'entries'; location.hash = 'host';
       } else {
-        lsSet('name', name); draft.touched = false; draft.contactTouched = false;
+        lsSet('name', name); draft.touched = false; draft.contactTouched = false; draft.photoTouched = false;
       }
     } catch (e) {
       var code = e && e.code;
@@ -824,7 +920,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         }
       },
         h('span', { class: 'rank', text: (r.tied ? 'T' : '') + r.rank }),
-        h('span', { class: 'name', text: r.e.name || 'Unnamed' }),
+        h('span', { class: 'who' }, miniAvatar(r.e.photo, r.e.name), h('span', { class: 'name', text: r.e.name || 'Unnamed' })),
         h('span', { class: 'pts' }, String(r.pts), h('small', { text: 'pts' }))));
       if (open) root.append(detail(r));
     });
@@ -898,8 +994,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   function msgEl(m) {
     var mine = !!uid && m.uid === uid;
+    var sender = entries.find(function (x) { return x.id === m.uid; });
     return h('div', { class: 'msg' + (mine ? ' mine' : '') },
       h('div', { class: 'mhead' },
+        miniAvatar(sender && sender.photo, m.name, 'sm'),
         h('span', { class: 'mname', text: m.name || 'Someone' }),
         h('span', { class: 'mtime', text: m.ts ? timeStr(m.ts) : '' }),
         isOwner ? h('button', { class: 'mdel', type: 'button', text: 'Remove', 'aria-label': 'Remove this message',
@@ -962,7 +1060,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Host tools' }, tabs.map(function (t) {
       return h('button', { type: 'button', text: t[1], 'aria-pressed': String(hostTab === t[0]),
         onclick: function () { hostTab = t[0]; render(); } });
-    })));
+    }).concat([h('a', { href: location.pathname, text: 'All pools' })])));
     if (!loaded.game) { root.append(loadingNote()); return root; }
     if (game) root.append(lockCard());
     root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'entries' ? hostEntries() : hostScore());
@@ -1085,6 +1183,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
             saveGame({ lockAt: v ? new Date(v).getTime() : null });
           } }))));
 
+    box.append(barCard());
+
     box.append(h('div', { class: 'card stack' },
       h('label', { class: 'lbl', for: 'e-title' }, 'Pool name',
         h('input', { type: 'text', id: 'e-title', maxLength: 60, value: edit.title,
@@ -1176,14 +1276,18 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     }
   }
 
+  function contactInfo(e) {
+    var c = contactMap[e.id] || {}, lg = c.contact || '';
+    return { full: c.fullName || '', email: c.email || (lg.indexOf('@') >= 0 ? lg : ''), phone: c.phone || (lg && lg.indexOf('@') < 0 ? lg : '') };
+  }
   function contactLists() {
     var emails = [], phones = [], all = [];
     entries.forEach(function (e) {
-      var c = contactMap[e.id];
-      if (!c || !c.contact) return;
-      var v = String(c.contact).trim();
-      all.push((e.name || 'Unnamed') + ' - ' + v);
-      (v.indexOf('@') >= 0 ? emails : phones).push(v);
+      var c = contactInfo(e);
+      if (!c.full && !c.email && !c.phone) return;
+      all.push([c.full || e.name || 'Unnamed', c.email, c.phone].filter(Boolean).join(' - '));
+      if (c.email) emails.push(c.email);
+      if (c.phone) phones.push(c.phone);
     });
     return { emails: emails, phones: phones, all: all };
   }
@@ -1219,9 +1323,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       var confirming = confirmId === e.id;
       box.append(h('div', { class: 'card entry-row' },
         h('div', { class: 'ptext' },
-          h('span', { class: 'name', text: e.name || 'Unnamed' }),
+          h('span', { class: 'who' }, miniAvatar(e.photo, e.name), h('span', { class: 'name', text: e.name || 'Unnamed' })),
           e.by === 'host' ? h('span', { class: 'hint', text: 'Entered by you' }) : null,
-          contactMap[e.id] && contactMap[e.id].contact ? h('span', { class: 'hint', text: contactMap[e.id].contact }) : null),
+          [contactInfo(e).full, contactInfo(e).email, contactInfo(e).phone].filter(Boolean).map(function (t) { return h('span', { class: 'hint', text: t }); }),
+          e.photo ? h('button', { class: 'linkbtn', type: 'button', text: 'Remove photo', style: 'justify-self:start;padding:4px 0', onclick: function () {
+            db.doc('entries/' + e.id).update({ photo: null }).then(function () { toast('Photo removed'); }, function () { toast("Couldn't remove that photo."); });
+          } }) : null),
         isOwner ? h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm remove' : 'Remove',
           onclick: function () {
             if (!confirming) {
@@ -1473,6 +1580,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       await db.doc('hof/' + id).update({ year: new Date().getFullYear(), name: name, pool: pid, hasResults: true, addedAt: Date.now() });
     }).then(function (ok) { if (ok) { delete fameData[id]; toast('Added to the Hall of Fame'); } });
   }
+  function toggleFame(id, open) {
+    if (open) fameOpen.delete(id); else { fameOpen.add(id); loadFameData(id); }
+    render();
+  }
   function loadFameData(id) {
     if (fameData[id] !== undefined) return;
     fameData[id] = null;
@@ -1615,16 +1726,20 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       var avatar = w.photo
         ? h('button', { class: 'avatar', type: 'button', 'aria-label': 'View photo of ' + (w.name || 'winner'), onclick: function () { showPhoto(w); } }, h('img', { src: w.photo, alt: '' }))
         : h('span', { class: 'avatar plain', 'aria-hidden': 'true' }, iconEl('trophy'));
-      item.append(h('div', { class: 'fame-row' + (i === 0 ? ' lead' : '') },
+      var rowProps = { class: 'fame-row' + (i === 0 ? ' lead' : '') + (w.hasResults ? ' tap' : '') };
+      if (w.hasResults) {
+        rowProps.role = 'button'; rowProps.tabindex = '0'; rowProps['aria-expanded'] = String(open);
+        rowProps.onclick = function (ev) { if (ev.target.closest && ev.target.closest('.avatar')) return; toggleFame(w.id, open); };
+        rowProps.onkeydown = function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === ev.currentTarget) { ev.preventDefault(); toggleFame(w.id, open); } };
+      }
+      item.append(h('div', rowProps,
         h('span', { class: 'yr', text: String(w.year || '') }),
         avatar,
         h('span', { class: 'name', text: w.name || '' }),
-        h('span', { class: 'fame-end' }, wins[k] > 1 ? h('span', { class: 'tag gold', text: wins[k] + ' wins' }) : null)));
+        h('span', { class: 'fame-end' },
+          wins[k] > 1 ? h('span', { class: 'tag gold', text: wins[k] + ' wins' }) : null,
+          w.hasResults ? h('span', { class: 'chev', 'aria-hidden': 'true', text: open ? '\u25B4' : '\u25BE' }) : null)));
       var tools = [];
-      if (w.hasResults) {
-        tools.push(h('button', { class: 'btn ghost small', type: 'button', 'aria-expanded': String(open), text: open ? 'Hide results' : 'View results',
-          onclick: function () { if (open) fameOpen.delete(w.id); else { fameOpen.add(w.id); loadFameData(w.id); } render(); } }));
-      }
       if (canEdit) {
         tools.push(fileBtn(w.photo ? 'Change photo' : 'Add photo', function (f) { setWinnerPhoto(w.id, f); }));
         if (w.photo) tools.push(h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () { removeWinnerPhoto(w.id); } }));
@@ -1678,7 +1793,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   function renderFoot() {
     if (!configured || !auth) { $foot.replaceChildren(); return; }
     var items = [];
-    if (canEdit && pid) items.push(h('a', { class: 'linkbtn', href: location.pathname, text: 'All pools' }));
     items.push(canEdit
       ? h('button', { class: 'linkbtn', type: 'button', text: 'Host: sign out', onclick: hostSignOut })
       : h('button', { class: 'linkbtn', type: 'button', text: 'Host sign in', onclick: hostSignIn }));
@@ -1702,7 +1816,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     }
   }
   async function hostSignOut() {
-    try { await rootDb.doc('hostSessions/' + auth.currentUser.uid).delete(); } catch (e) {}
+    try { await rootDb.doc('hostSessions/' + auth.currentUser.uid).delete(); } catch (e) { toast("Couldn't sign out. Check your connection and try again."); return; }
     hostSubs = false; contactSubs = false; contactMap = {}; legacyFame = undefined;
     poolList = []; versionList = []; poolsLoaded = false;
     await applyUser(auth.currentUser);
@@ -1721,7 +1835,13 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!id || !db || !pid || contactLoadedFor === id || draft.contactTouched) return;
     contactLoadedFor = id;
     db.doc('contacts/' + id).get().then(function (s) {
-      if (s.exists && !draft.contactTouched) { draft.contact = (s.data() || {}).contact || ''; renderSoon(); }
+      if (s.exists && !draft.contactTouched) {
+        var c = s.data() || {}, lg = c.contact || '';
+        draft.fullName = c.fullName || '';
+        draft.email = c.email || (lg.indexOf('@') >= 0 ? lg : '');
+        draft.phone = c.phone || (lg && lg.indexOf('@') < 0 ? lg : '');
+        renderSoon();
+      }
     }, function () {});
   }
   async function applyUser(u) {
