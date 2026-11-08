@@ -1126,10 +1126,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       versionList = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       renderSoon();
     }, function () {});
-    rootDb.collection('admins').onSnapshot(function (s) {
-      adminList = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-      renderSoon();
-    }, function () {});
   }
 
   async function createPool() {
@@ -1254,7 +1250,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       root.append(h('div', { class: 'eyebrow', text: 'Past pools' }));
       past.forEach(function (p) { root.append(poolRow(p, true)); });
     }
-    if (isMaster) root.append(hostsCard());
     return root;
   }
 
@@ -1374,35 +1369,37 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var items = [];
     if (canEdit && pid) items.push(h('a', { class: 'linkbtn', href: location.pathname, text: 'All pools' }));
     items.push(canEdit
-      ? h('button', { class: 'linkbtn', type: 'button', text: 'Host: sign out', onclick: function () { signOut(auth); } })
+      ? h('button', { class: 'linkbtn', type: 'button', text: 'Host: sign out', onclick: hostSignOut })
       : h('button', { class: 'linkbtn', type: 'button', text: 'Host sign in', onclick: hostSignIn }));
     $foot.replaceChildren.apply($foot, items);
   }
   function emailKey(e) { return String(e || '').toLowerCase().replace(/\./g, ','); }
   async function resolveHost(u) {
-    if (!u || u.isAnonymous || !u.emailVerified || !u.email) return false;
-    var email = String(u.email).toLowerCase();
-    if (email === HOST_EMAIL_L) return true;
-    try { var s = await rootDb.doc('admins/' + emailKey(email)).get(); return s.exists; } catch (e) { return false; }
+    if (!u) return false;
+    try { var s = await rootDb.doc('hostSessions/' + u.uid).get(); return s.exists; } catch (e) { return false; }
   }
   async function hostSignIn() {
+    if (!auth || !auth.currentUser) { toast('Still connecting. Try again in a moment.'); return; }
+    var pw = window.prompt('Host password');
+    if (pw === null || pw === '') return;
     try {
-      var cred = await signInWithPopup(auth, new GoogleAuthProvider());
-      if (!(await resolveHost(cred.user))) {
-        toast("That Google account isn't a host. Ask the owner to add it.");
-        await signOut(auth);
-      }
+      await rootDb.doc('hostSessions/' + auth.currentUser.uid).set(pw);
+      await applyUser(auth.currentUser);
+      toast('Signed in as host');
     } catch (e) {
-      var c = e && e.code;
-      if (c !== 'auth/popup-closed-by-user' && c !== 'auth/cancelled-popup-request') {
-        toast("Couldn't sign in. Allow pop-ups for this site and try again.");
-      }
+      toast('Wrong password.');
     }
+  }
+  async function hostSignOut() {
+    try { await rootDb.doc('hostSessions/' + auth.currentUser.uid).delete(); } catch (e) {}
+    hostSubs = false;
+    poolList = []; versionList = []; poolsLoaded = false;
+    await applyUser(auth.currentUser);
   }
   async function applyUser(u) {
     uid = u ? u.uid : null;
     var host = await resolveHost(u);
-    isMaster = !!(host && u && String(u.email).toLowerCase() === HOST_EMAIL_L);
+    isMaster = false;
     isOwner = canEdit = host;
     canWrite = true;
     if (host) startHostSubs();
