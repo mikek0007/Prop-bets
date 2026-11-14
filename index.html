@@ -203,6 +203,21 @@ a.linkbtn{display:inline-block}
 .chip.sm{min-height:36px;padding:4px 10px;font-size:14px}
 .bprow{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .bprow:first-child{border-top:0}
+.opt{padding-bottom:4px}
+.opt span{box-shadow:0 4px 0 rgba(0,0,0,.24),inset 0 -2px 0 rgba(0,0,0,.05);transition:transform .08s,box-shadow .08s}
+.opt:active span{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.24)}
+.opt input:checked+span{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.4),inset 0 3px 6px rgba(0,0,0,.4)}
+.opt input:disabled+span{box-shadow:none;transform:none}
+.btn.raise{margin-bottom:5px;box-shadow:0 5px 0 rgba(0,0,0,.3);transition:transform .08s,box-shadow .08s}
+.btn.raise:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.btn.raise:disabled{box-shadow:none;transform:none}
+.introimg{display:block;width:100%;height:auto;max-height:420px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.bqrow{grid-template-columns:auto minmax(0,1fr) auto}
+.bqrow .rank{font-size:22px;min-width:40px}
+.bqrow .name{font-size:16px}
+.tswatch{display:grid;gap:4px;justify-items:center;font:600 12px var(--body);color:var(--ink-2);background:none;border:0;padding:0;cursor:pointer}
+.tswatch i{display:block;width:44px;height:44px;border-radius:50%;border:3px solid var(--line)}
+.tswatch[aria-pressed="true"] i{border-color:var(--ink);box-shadow:inset 0 0 0 3px var(--surface)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -311,7 +326,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   var poolForm = { name: '', source: 'blank' }, versionName = '';
   var fameList = [], fameLoaded = false, fameForm = { year: '', name: '', photo: '' }, adminList = [], isMaster = false;
   var qimgs = {}, trophy = null, contactMap = {}, contactSubs = false, contactLoadedFor = null;
-  var boardMode = 'player', bqId = null, marksList = [], storyHi = null, curStory = { badges: {} }, fameStoryOpen = new Set();
+  var bqOpen = new Set(), boardMode = 'player', bqId = null, marksList = [], storyHi = null, curStory = { badges: {} }, fameStoryOpen = new Set();
   var fameOpen = new Set(), fameData = {}, fameEntryOpen = new Set(), legacyFame;
 
   function lsGet(k) { try { return localStorage.getItem('sbp:' + k) || ''; } catch (e) { return ''; } }
@@ -417,6 +432,44 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         img ? h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () { removeQPhoto(q.id); } }) : null));
   }
 
+  /* ---------- app color ---------- */
+  var THEMES = {
+    navy:   ['Blue',   ['#E6ECF7', '#2457D6', '#FFFFFF', '#D7E3FA'], ['#0A1226', '#6F95F0', '#0A1226', '#1A2850']],
+    green:  ['Green',  ['#E4F0E6', '#1F7A45', '#FFFFFF', '#CFE8D6'], ['#0A1A12', '#4CCB8B', '#0A1A12', '#12362A']],
+    red:    ['Red',    ['#F6E7E5', '#B8322A', '#FFFFFF', '#F3D2CF'], ['#1E0E0E', '#FF8279', '#1E0E0E', '#4A1F1F']],
+    purple: ['Purple', ['#EEE8F7', '#5B3A8C', '#FFFFFF', '#DDD0F0'], ['#130E22', '#B79CF0', '#130E22', '#33244F']],
+    orange: ['Orange', ['#FBEEDF', '#B8520A', '#FFFFFF', '#F8DDC0'], ['#1F1308', '#FFA24D', '#1F1308', '#4A2D10']],
+    teal:   ['Teal',   ['#E1F1F2', '#0E7C86', '#FFFFFF', '#C5E6E9'], ['#07191B', '#5CC4CC', '#07191B', '#0F3A3F']],
+    slate:  ['Slate',  ['#E9EAEE', '#23252E', '#FFFFFF', '#D5D7DF'], ['#0B0B0E', '#D6D8E0', '#0B0B0E', '#2A2C36']]
+  };
+  var themeApplied = '';
+  function themeVars(a) { return '--bg:' + a[0] + ';--accent:' + a[1] + ';--on-accent:' + a[2] + ';--accent-bg:' + a[3] + ';'; }
+  function applyTheme() {
+    var key = pid && game && THEMES[game.theme] ? game.theme : '';
+    if (key === themeApplied) return;
+    themeApplied = key;
+    var el = document.getElementById('theme-style');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (!key) { if (el) el.remove(); if (meta) meta.setAttribute('content', '#13203A'); return; }
+    if (!el) { el = document.createElement('style'); el.id = 'theme-style'; document.head.appendChild(el); }
+    var t = THEMES[key];
+    el.textContent = ':root{' + themeVars(t[1]) + '}' +
+      '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){' + themeVars(t[2]) + '}}' +
+      ':root[data-theme="dark"]{' + themeVars(t[2]) + '}';
+    if (meta) meta.setAttribute('content', t[1][1]);
+  }
+  function themeCard() {
+    var cur = game && THEMES[game.theme] ? game.theme : '';
+    var sw = [['', 'Original', '#E8A700']].concat(Object.keys(THEMES).map(function (k) { return [k, THEMES[k][0], THEMES[k][1][1]]; }));
+    return h('div', { class: 'card stack' },
+      h('div', { class: 'lbl', text: 'App color' }, h('small', { text: 'Tints the background, tabs and buttons for everyone in this pool. It saves right away.' })),
+      h('div', { class: 'qedit-tools', role: 'group', 'aria-label': 'App color' }, sw.map(function (x) {
+        var b = h('button', { class: 'tswatch', type: 'button', 'aria-pressed': String(cur === x[0]), 'aria-label': x[1],
+          onclick: function () { saveGame({ theme: x[0] || null }); } }, h('i', { style: 'background:' + x[2] }), h('span', { text: x[1] }));
+        return b;
+      })));
+  }
+
   /* ---------- progress bar look ---------- */
   var BAR_COLORS = {
     turf: ['#2F7D52', '#5DB382', 'Green'], navy: ['#1F3A68', '#6F95D6', 'Navy'], red: ['#B8322A', '#E8837B', 'Red'],
@@ -516,7 +569,23 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   ICONS.perfect = `<circle class="o" cx="24" cy="24" r="19" fill="#F2B705"/><circle cx="24" cy="24" r="14" fill="none" stroke="#B57F00" stroke-width="2"/><text x="24" y="30" text-anchor="middle" font-size="15" font-weight="800" fill="#13203A" font-family="Arial,sans-serif">100</text>`;
   ICONS.heart = `<path class="o" d="M24 42 C8 30 6 18 12 12 C17 7 23 10 24 15 C25 10 31 7 36 12 C42 18 40 30 24 42Z" fill="#E85D75"/><path class="ln" d="M24 15 L21 24 L27 29 L23 38"/>`;
   ICONS.b2b = ICONS.trophy + `<text x="40" y="12" text-anchor="middle" font-size="12" font-weight="800" fill="#D23A2E" font-family="Arial,sans-serif">x2</text>`;
+  ICONS.early = `<path class="o" d="M6 34 A18 18 0 0 1 42 34Z" fill="#FFC83D"/><path class="ln" d="M24 5V10 M8 14L11 17 M40 14L37 17 M3 26H8 M40 26H45 M4 37H44"/>${eyes(24, 29, 10, 2.6, 0, 1)}`;
+  ICONS.closer = `<path class="o" d="M30 5 A18 18 0 1 0 43 30 A14 14 0 0 1 30 5Z" fill="#F2D777"/>${eyes(19, 27, 8, 2.4, 0, 1)}<path d="M38 8 l1.3 3 3 1.3 -3 1.3 -1.3 3 -1.3-3 -3-1.3 3-1.3z" fill="#FFC83D"/>`;
+  ICONS.sharp = `<circle class="o" cx="22" cy="26" r="17" fill="#fff"/><circle cx="22" cy="26" r="11" fill="#D23A2E" stroke="#13203A" stroke-width="2"/><circle cx="22" cy="26" r="5" fill="#fff" stroke="#13203A" stroke-width="2"/><path class="ln" d="M22 26 L40 8"/><path class="ln" d="M40 8 l1-5 M40 8 l5-1 M36 12 l1-4 M36 12 l4-1"/>`;
+  ICONS.contra = `<circle class="o" cx="24" cy="24" r="19" fill="#FFC83D"/><rect class="o" x="8" y="18" width="14" height="9" rx="3" fill="#13203A"/><rect class="o" x="26" y="18" width="14" height="9" rx="3" fill="#13203A"/><path class="ln" d="M22 21H26"/><path class="ln" d="M16 35 Q26 40 33 33"/>`;
+  ICONS.bounce = `<circle class="o" cx="24" cy="13" r="10" fill="#F26B1D"/>${eyes(24, 12, 8, 2.4, 0, 1)}<path class="ln" d="M24 24 L16 28 L32 32 L16 36 L32 40 L24 44"/>`;
+  ICONS.iron = `<path class="o" d="M24 3 L41 9 V24 Q41 38 24 45 Q7 38 7 24 V9Z" fill="#9AA4B8"/><path class="o" d="M24 9 L35 13 V24 Q35 33 24 39 Q13 33 13 24 V13Z" fill="#D23A2E"/>${eyes(24, 22, 9, 2.6, 0, 1)}`;
+  ICONS.tough = `<path class="o" d="M13 28 A9 9 0 0 1 15 11 A11 11 0 0 1 36 14 A8 8 0 0 1 36 28Z" fill="#7D879B"/>${eyes(24, 19, 10, 2.8, 0, 1)}${frown(24, 25, 3.5)}<path class="ln" style="stroke:#5BC0EB" d="M14 34L12 40 M24 34L22 42 M34 34L32 40"/>`;
+  ICONS.steady = `<rect class="o" x="3" y="16" width="42" height="16" rx="5" fill="#F2B705"/><rect x="18" y="19" width="12" height="10" rx="5" fill="#fff" stroke="#13203A" stroke-width="2"/><circle cx="24" cy="24" r="2.6" fill="#5BC0EB"/>`;
+  ICONS.almost = `<path class="o" d="M14 3 L22 18 H14Z M34 3 L26 18 H34Z" fill="#5BC0EB"/><circle class="o" cx="24" cy="31" r="14" fill="#CBD2DE"/><text x="24" y="37" text-anchor="middle" font-size="18" font-weight="800" fill="#13203A" font-family="Arial,sans-serif">2</text>`;
+  ICONS.crowd = `<circle class="o" cx="14" cy="20" r="7" fill="#F4C9A0"/><circle class="o" cx="34" cy="20" r="7" fill="#F4C9A0"/><path class="o" d="M3 43 Q14 26 25 43Z" fill="#5BC0EB"/><path class="o" d="M23 43 Q34 26 45 43Z" fill="#E85D75"/><circle class="o" cx="24" cy="14" r="8" fill="#F4C9A0"/>${eyes(24, 13, 6, 1.8, 0, 1)}<path class="o" d="M13 45 Q24 24 35 45Z" fill="#F2B705"/>`;
+  ICONS.slow = `<path class="o" d="M4 40 H40 Q44 40 44 36 Q44 32 40 32 H12Z" fill="#E9C99B"/><circle class="o" cx="26" cy="26" r="12" fill="#8A4B24"/><path class="ln" style="stroke:#F4C9A0;stroke-width:2.5" d="M26 26 a3 3 0 1 1 3 3 a6 6 0 1 1 -6 -6"/><path class="ln" d="M7 34 L5 24 M12 34 L12 24"/><circle cx="5" cy="23" r="2.6" fill="#fff" stroke="#13203A" stroke-width="1.5"/><circle cx="12" cy="23" r="2.6" fill="#fff" stroke="#13203A" stroke-width="1.5"/>`;
+  ICONS.darkhorse = `<path class="o" d="M10 6 V24 A14 14 0 0 0 38 24 V6 H30 V24 A6 6 0 0 1 18 24 V6Z" fill="#4A4F63"/><circle cx="14" cy="14" r="1.8" fill="#E9EDF5"/><circle cx="34" cy="14" r="1.8" fill="#E9EDF5"/><circle cx="14" cy="23" r="1.8" fill="#E9EDF5"/><circle cx="34" cy="23" r="1.8" fill="#E9EDF5"/>`;
+  ICONS.sport = `<path class="o" d="M16 28 L10 45 L19 41 L22 30Z" fill="#5BC0EB"/><path class="o" d="M32 28 L38 45 L29 41 L26 30Z" fill="#5BC0EB"/><circle class="o" cx="24" cy="20" r="15" fill="#6BCB77"/>${eyes(24, 18, 9, 2.6, 0, 1)}<path class="ln" d="M17 25 Q24 31 31 25"/>`;
+  var NEG_BADGES = { trash: 1, dive: 1, ice: 1, heart: 1, tough: 1 };
   var BADGES = {
+    early: 'Early Bird', closer: 'Closer', sharp: 'Sharpshooter', contra: 'Contrarian', bounce: 'Bounce Back', iron: 'Iron Man',
+    tough: 'Tough Luck', steady: 'Mr. Consistent', almost: 'Almost There', crowd: 'Crowd Pleaser', slow: 'Slow Starter', darkhorse: 'Dark Horse', sport: 'Good Sport',
     hot: 'Hot Streak', goat: 'GOAT', trash: 'Trash Can Fire', wolf: 'Lone Wolf', comeback: 'Comeback Kid', wire: 'Wire to Wire',
     rocket: 'Rocket', dive: 'Nosedive', ice: 'Ice Cold', crystal: 'Crystal Ball', perfect: 'Perfect Game', heart: 'Heartbreaker', b2b: 'Back to Back'
   };
@@ -688,6 +757,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
   function render() {
     pendingRender = false;
+    applyTheme();
     if (!pid) { renderPicker(); return; }
     renderMast();
     renderTabs();
@@ -715,24 +785,40 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!loaded.intro) return loadingNote();
     var root = h('div', { class: 'stack' });
     var text = (intro && intro.text) || '';
+    var img = (intro && intro.img) || '';
     var canEditIntro = canEdit;
     if (introEditing && canEditIntro) {
       var ta = h('textarea', { id: 'intro-text', rows: 16, value: introDraft,
         oninput: function (ev) { introDraft = ev.target.value; } });
       root.append(h('div', { class: 'card stack' },
+        h('div', { class: 'lbl' }, 'Intro image', h('small', { text: 'Optional. It shows at the top of the intro page. It saves right away.' })),
+        img ? h('img', { class: 'introimg', src: img, alt: 'Intro image' }) : null,
+        h('div', { class: 'qedit-tools' },
+          fileBtn(img ? 'Change image' : 'Add image', async function (f) {
+            try {
+              var data = await fileToDataUrl(f, 900, 110000);
+              var ok = await enqueue(function () { return db.doc('config/intro').update({ img: data, at: Date.now() }); });
+              if (ok) toast('Image saved');
+            } catch (e) { badPhoto(); }
+          }),
+          img ? h('button', { class: 'btn ghost small', type: 'button', text: 'Remove image', onclick: async function () {
+            var ok = await enqueue(function () { return db.doc('config/intro').update({ img: null, at: Date.now() }); });
+            if (ok) toast('Image removed');
+          } }) : null)));
+      root.append(h('div', { class: 'card stack' },
         h('label', { class: 'lbl', for: 'intro-text' }, 'Intro text',
           h('small', { text: 'Blank lines start a new paragraph.' }), ta),
         h('div', { class: 'qedit-tools' },
           h('button', { class: 'btn small', type: 'button', text: 'Save intro', onclick: async function () {
-            var ok = await enqueue(function () { return db.doc('config/intro').set({ text: introDraft.trim(), at: Date.now() }); });
+            var ok = await enqueue(function () { return db.doc('config/intro').update({ text: introDraft.trim(), at: Date.now() }); });
             if (ok) { introEditing = false; toast('Intro saved'); render(); }
           } }),
           h('button', { class: 'btn ghost small', type: 'button', text: 'Cancel', onclick: function () { introEditing = false; render(); } }))));
       return root;
     }
-    root.append(text
-      ? h('div', { class: 'card' }, h('div', { class: 'introtext', text: text }))
-      : note('No intro yet', canEditIntro ? 'Tap Edit intro to write a welcome message.' : 'The host has not posted an intro yet.'));
+    if (img) root.append(h('img', { class: 'introimg', src: img, alt: 'Intro image' }));
+    if (text) root.append(h('div', { class: 'card' }, h('div', { class: 'introtext', text: text })));
+    if (!text && !img) root.append(note('No intro yet', canEditIntro ? 'Tap Edit intro to write a welcome message.' : 'The host has not posted an intro yet.'));
     root.append(h('div', { class: 'submit' },
       h('a', { class: 'btn link', href: '#entry', text: 'Make your picks' }),
       canEditIntro ? h('button', { class: 'btn ghost small', type: 'button', text: 'Edit intro',
@@ -839,7 +925,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       cin('f-email', 'Email', 'email', 80, 'email', 'email'),
       cin('f-phone', 'Phone', 'tel', 30, 'tel', 'phone')));
 
-    var btn = h('button', { class: 'btn', type: 'button', onclick: submitEntry },
+    var btn = h('button', { class: 'btn raise', type: 'button', onclick: submitEntry },
       guestId ? 'Save entry' : mine ? 'Update my picks' : 'Lock in my picks');
     var hint = h('span', { class: 'hint' });
     if (!readOnly) root.append(h('div', { class: 'submit' }, btn, hint));
@@ -1017,30 +1103,41 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var box = h('div', { class: 'stack' });
     var reveal = isLocked() || results.final || canEdit;
     if (!reveal) { box.append(note('Picks stay hidden', 'Everyone can compare picks once entries close.')); return box; }
-    if (!bqId || !list.some(function (x) { return x.id === bqId; })) bqId = list[0].id;
-    var q = list.find(function (x) { return x.id === bqId; });
-    var sel = h('select', { id: 'bq-sel', 'aria-label': 'Question', onchange: function (ev) { bqId = ev.target.value; render(); } },
-      list.map(function (x, i) { return h('option', { value: x.id, text: 'Q' + (i + 1) + ': ' + String(x.text).slice(0, 70) }); }));
-    sel.value = bqId;
-    box.append(sel);
-    var a = answerOf(q);
     var total = rows.length;
-    opts(q).forEach(function (o, oi) {
-      var who = rows.filter(function (r) { return r.e.picks && r.e.picks[q.id] === oi; })
-        .map(function (r) { return r.e.name || 'Unnamed'; }).sort(function (x, y) { return x.localeCompare(y); });
-      var pct = total ? Math.round(who.length / total * 100) : 0;
-      box.append(h('div', { class: 'card stack bq-opt' },
-        h('div', { class: 'toggle' },
-          h('strong', { class: 'name', text: o }),
-          h('span', { class: 'qedit-tools' },
-            a === oi ? h('span', { class: 'tag good', text: 'Correct' }) : null,
-            h('span', { class: 'pts-tag', text: who.length + ' · ' + pct + '%' }))),
-        h('div', { class: 'bar' + (a === oi ? ' good' : '') }, h('i', { style: 'width:' + pct + '%' })),
-        h('div', { class: 'names', text: who.length ? who.join(', ') : 'Nobody' })));
+    list.forEach(function (q, qi) {
+      var open = bqOpen.has(q.id);
+      var a = answerOf(q);
+      var rightN = a === null ? 0 : rows.filter(function (r) { return r.e.picks && r.e.picks[q.id] === a; }).length;
+      box.append(h('button', {
+        class: 'row bqrow', type: 'button', 'data-qid': q.id, 'aria-expanded': String(open),
+        onclick: function () {
+          if (open) bqOpen.delete(q.id); else bqOpen.add(q.id);
+          render();
+          var again = $app.querySelector('[data-qid="' + q.id + '"]');
+          if (again) again.focus();
+        }
+      },
+        h('span', { class: 'rank', text: 'Q' + (qi + 1) }),
+        h('span', { class: 'wtext' }, h('span', { class: 'name', text: q.text }),
+          h('span', { class: 'hint', text: a === null ? 'Not marked yet' : 'Answer: ' + (opts(q)[a] || '') })),
+        h('span', { class: 'pts' }, a === null || !total ? '—' : Math.round(rightN / total * 100) + '%', h('small', { text: a === null ? '' : 'right' }))));
+      if (!open) return;
+      opts(q).forEach(function (o, oi) {
+        var who = rows.filter(function (r) { return r.e.picks && r.e.picks[q.id] === oi; })
+          .map(function (r) { return r.e.name || 'Unnamed'; }).sort(function (x, y) { return x.localeCompare(y); });
+        var pct = total ? Math.round(who.length / total * 100) : 0;
+        box.append(h('div', { class: 'card stack bq-opt' },
+          h('div', { class: 'toggle' },
+            h('strong', { class: 'name', text: o }),
+            h('span', { class: 'qedit-tools' },
+              a === oi ? h('span', { class: 'tag good', text: 'Correct' }) : null,
+              h('span', { class: 'pts-tag', text: who.length + ' · ' + pct + '%' }))),
+          h('div', { class: 'bar' + (a === oi ? ' good' : '') }, h('i', { style: 'width:' + pct + '%' })),
+          h('div', { class: 'names', text: who.length ? who.join(', ') : 'Nobody' })));
+      });
+      var none = rows.filter(function (r) { return !(r.e.picks && Number.isInteger(r.e.picks[q.id])); }).length;
+      if (none) box.append(h('p', { class: 'hint', text: none + (none === 1 ? ' entry has no pick.' : ' entries have no pick.') }));
     });
-    var none = rows.filter(function (r) { return !(r.e.picks && Number.isInteger(r.e.picks[q.id])); }).length;
-    if (none) box.append(h('p', { class: 'hint', text: none + (none === 1 ? ' entry has no pick.' : ' entries have no pick.') }));
-    if (a === null) box.append(h('p', { class: 'hint', text: 'The answer has not been marked yet.' }));
     return box;
   }
 
@@ -1111,7 +1208,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     out.steps = steps; out.order = order; out.scored = order.length; out.cur = cur;
     if (!order.length || n < 2) {
       if (goats.length && order.length) card('goat', 'GOAT', joinNames(goats, names) + ' has the most Hall of Fame wins (' + maxWins + ').');
-      return out;
+      return finishStory(out);
     }
     var fin = steps[steps.length - 1], pts = fin.pts;
     var hi = Math.max.apply(null, ids.map(function (id) { return pts[id]; }));
@@ -1241,6 +1338,84 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       card('crystal', 'Crystal ball', joinNames(cb, names) + ' called ' + cMax + ' answers that few others saw coming.');
     }
 
+    // more awards
+    var pickOf = {}, rightArr = {};
+    E.forEach(function (e) { pickOf[e.id] = e.picks || {}; });
+    ids.forEach(function (id) { rightArr[id] = order.map(function (qid) { return pickOf[id][qid] === cur[qid] ? 1 : 0; }); });
+    function sumRange(arr2, a, b) { var t = 0; for (var i = a; i < b; i++) t += arr2[i]; return t; }
+    function topOf(score, minVal, label) {
+      var vals = ids.map(function (id) { return score[id]; });
+      var mx = Math.max.apply(null, vals), mn = Math.min.apply(null, vals);
+      if (mx < minVal || mx === mn) return [];
+      return ids.filter(function (id) { return score[id] === mx; });
+    }
+    var kk = Math.min(3, Math.floor(order.length / 2));
+    if (order.length >= 4) {
+      var eb = {}; ids.forEach(function (id) { eb[id] = sumRange(rightArr[id], 0, kk); });
+      var ebw = topOf(eb, 2);
+      ebw.forEach(function (id) { give(id, 'early', eb[id] + ' of the first ' + kk + ' answers right'); });
+      if (ebw.length) card('early', 'Early bird', joinNames(ebw, names) + ' got ' + eb[ebw[0]] + ' of the first ' + kk + ' answers right.');
+    }
+    if (order.length >= 6) {
+      var cl = {}; ids.forEach(function (id) { cl[id] = sumRange(rightArr[id], order.length - kk, order.length); });
+      var clw = topOf(cl, 2);
+      clw.forEach(function (id) { give(id, 'closer', cl[id] + ' of the last ' + kk + ' answers right'); });
+      if (clw.length) card('closer', 'Closer', joinNames(clw, names) + ' got ' + cl[clw[0]] + ' of the last ' + kk + ' answers right.');
+    }
+    if (order.length >= 5) {
+      var sr = {}; ids.forEach(function (id) { sr[id] = Math.round(sumRange(rightArr[id], 0, order.length) / order.length * 1000) / 1000; });
+      var srw = topOf(sr, 0.5);
+      srw.forEach(function (id) { give(id, 'sharp', Math.round(sr[id] * 100) + '% of answers right'); });
+      if (srw.length) card('sharp', 'Sharpshooter', joinNames(srw, names) + ' hit ' + Math.round(sr[srw[0]] * 100) + '% of the answers.');
+    }
+    // against the crowd, over every question that has a clear favorite
+    var offCrowd = {}, withCrowd = {}, crowdQs = 0;
+    ids.forEach(function (id) { offCrowd[id] = 0; withCrowd[id] = 0; });
+    Q.forEach(function (q) {
+      var oo = arr(q.options), cnt = oo.map(function () { return 0; });
+      E.forEach(function (e) { var pk = pickOf[e.id][q.id]; if (Number.isInteger(pk) && cnt[pk] != null) cnt[pk]++; });
+      var mxc = Math.max.apply(null, cnt), tp = [];
+      cnt.forEach(function (c, ix) { if (c === mxc) tp.push(ix); });
+      if (tp.length !== 1 || mxc === 0) return;
+      crowdQs++;
+      ids.forEach(function (id) { var pk = pickOf[id][q.id]; if (Number.isInteger(pk)) { if (pk === tp[0]) withCrowd[id]++; else offCrowd[id]++; } });
+    });
+    if (n >= 4 && crowdQs >= 5) {
+      var ctw = topOf(offCrowd, 3);
+      ctw.forEach(function (id) { give(id, 'contra', offCrowd[id] + ' picks against the crowd favorite'); });
+      if (ctw.length) card('contra', 'Contrarian', joinNames(ctw, names) + ' went against the crowd favorite ' + offCrowd[ctw[0]] + ' times.');
+    }
+    var bounce = {};
+    ids.forEach(function (id) {
+      var miss = 0, i2 = 0, best2 = 0;
+      while (i2 < order.length) {
+        if (!rightArr[id][i2]) { miss++; i2++; continue; }
+        var run2 = 0; while (i2 < order.length && rightArr[id][i2]) { run2++; i2++; }
+        if (miss >= 2 && run2 > best2) best2 = run2;
+        miss = 0;
+      }
+      bounce[id] = best2;
+    });
+    var bw = topOf(bounce, 3);
+    bw.forEach(function (id) { give(id, 'bounce', 'Bounced back with ' + bounce[id] + ' right in a row after a slump'); });
+    if (bw.length) card('bounce', 'Bounce back', joinNames(bw, names) + ' answered ' + bounce[bw[0]] + ' in a row right after a slump.');
+    if (n >= 5 && scoringSteps.length >= 4) {
+      var top3 = {}; ids.forEach(function (id) { top3[id] = scoringSteps.filter(function (st2) { return st2.ranks[id] <= 3; }).length; });
+      var iw = topOf(top3, 3);
+      iw.forEach(function (id) { give(id, 'iron', 'In the top three after ' + top3[id] + ' of ' + scoringSteps.length + ' answers'); });
+      if (iw.length) card('iron', 'Iron man', joinNames(iw, names) + ' stayed in the top three after ' + top3[iw[0]] + ' of ' + scoringSteps.length + ' answers.');
+    }
+    if (n >= 3) {
+      var tl = {}; ids.forEach(function (id) { tl[id] = 0; });
+      order.forEach(function (qid, qx) {
+        var rc = ids.filter(function (id) { return rightArr[id][qx]; }).length;
+        if (rc / n >= 0.5) ids.forEach(function (id) { if (!rightArr[id][qx]) tl[id]++; });
+      });
+      var tlw = topOf(tl, 2);
+      tlw.forEach(function (id) { give(id, 'tough', 'Missed ' + tl[id] + ' questions most people got right'); });
+      if (tlw.length) card('tough', 'Tough luck', joinNames(tlw, names) + ' missed ' + tl[tlw[0]] + ' questions that most of the pool got right.');
+    }
+
     // the finish
     var sorted = ids.map(function (id) { return pts[id]; }).sort(function (a, b) { return b - a; });
     var gap = sorted[0] - sorted[1];
@@ -1273,7 +1448,44 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     } else {
       card('watch', 'Race for first', gap === 0 ? 'Tied at the top with ' + sorted[0] + (sorted[0] === 1 ? ' point.' : ' points.') : 'The lead is ' + gap + (gap === 1 ? ' point.' : ' points.'));
     }
+    // everyone gets one: players without a positive award get a fun one that is true for them
+    if (order.length >= 3) {
+      var early3 = steps[Math.min(3, steps.length - 1)], mentions = [];
+      ids.forEach(function (id) {
+        var has = (out.badges[id] || []).some(function (b) { return !NEG_BADGES[b.key]; });
+        if (has) return;
+        var fr = fin.ranks[id], er = early3.ranks[id], gapTop = hi - pts[id];
+        var rs = steps.slice(1).map(function (st3) { return st3.ranks[id]; });
+        var mean = rs.reduce(function (a, b) { return a + b; }, 0) / (rs.length || 1);
+        var sd = Math.sqrt(rs.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (rs.length || 1));
+        var offShare = (offCrowd[id] + withCrowd[id]) ? offCrowd[id] / (offCrowd[id] + withCrowd[id]) : 0;
+        var withShare = (offCrowd[id] + withCrowd[id]) ? withCrowd[id] / (offCrowd[id] + withCrowd[id]) : 0;
+        var key3, why;
+        if (er - fr >= 2) { key3 = 'slow'; why = 'Climbed from ' + ord(er) + ' to ' + ord(fr) + ' as the game went on'; }
+        else if (fr > 1 && gapTop <= 3 && hi > 0) { key3 = 'almost'; why = 'Only ' + gapTop + (gapTop === 1 ? ' point' : ' points') + ' behind first'; }
+        else if (steps.length >= 5 && sd <= 0.8) { key3 = 'steady'; why = 'Barely moved in the standings all game'; }
+        else if (crowdQs >= 5 && offShare >= 0.4) { key3 = 'darkhorse'; why = 'Picked against the crowd on ' + Math.round(offShare * 100) + '% of questions'; }
+        else if (crowdQs >= 5 && withShare >= 0.7) { key3 = 'crowd'; why = 'Went with the crowd favorite on ' + Math.round(withShare * 100) + '% of questions'; }
+        else { key3 = 'sport'; why = 'Played the whole game and stayed in it'; }
+        give(id, key3, why);
+        mentions.push(names[id] + ': ' + BADGES[key3]);
+      });
+      if (mentions.length) card('sport', 'Special mentions', mentions.join('. ') + '.');
+    }
     if (goats.length) card('goat', 'GOAT', joinNames(goats, names) + ' has the most Hall of Fame wins (' + maxWins + ').');
+    return finishStory(out);
+  }
+  function finishStory(out) {
+    var rank = { 'Trash Can Fire': 4, 'Biggest drop': 3, 'Ice cold': 3, 'Tough luck': 3, 'Heartbreaker': 3,
+      'Lead changes': 1, 'The trap': 1, 'Crowd favorite': 1, 'Closest race': 1, 'Race for first': 1, 'Special mentions': 2 };
+    out.cards = out.cards.map(function (c, i) { return { c: c, i: i }; })
+      .sort(function (a, b) { return ((rank[a.c.title] || 0) - (rank[b.c.title] || 0)) || (a.i - b.i); })
+      .map(function (x) { return x.c; });
+    Object.keys(out.badges).forEach(function (id) {
+      out.badges[id] = out.badges[id].map(function (b, i) { return { b: b, i: i }; })
+        .sort(function (a, b) { return ((NEG_BADGES[a.b.key] ? 1 : 0) - (NEG_BADGES[b.b.key] ? 1 : 0)) || (a.i - b.i); })
+        .map(function (x) { return x.b; });
+    });
     return out;
   }
 
@@ -1545,6 +1757,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           } }))));
 
     box.append(barCard());
+    box.append(themeCard());
 
     box.append(h('div', { class: 'card stack' },
       h('label', { class: 'lbl', for: 'e-title' }, 'Pool name',
@@ -1657,6 +1870,82 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     catch (e) { toast('Copy failed.'); }
   }
 
+  /* ---------- Excel export ---------- */
+  var CRC_T = null;
+  function crc32(u8) {
+    if (!CRC_T) { CRC_T = []; for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; } }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < u8.length; i++) crc = CRC_T[(crc ^ u8[i]) & 255] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], central = [], off = 0;
+    function u16(v) { return [v & 255, (v >>> 8) & 255]; }
+    function u32(v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
+    files.forEach(function (f) {
+      var name = enc.encode(f[0]), data = enc.encode(f[1]), crc = crc32(data);
+      var head = [0x50, 0x4B, 3, 4].concat(u16(20), u16(0x800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+      parts.push(new Uint8Array(head), name, data);
+      central.push(new Uint8Array([0x50, 0x4B, 1, 2].concat(u16(20), u16(20), u16(0x800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off))), name);
+      off += head.length + name.length + data.length;
+    });
+    var csize = 0; central.forEach(function (c) { csize += c.length; });
+    var end = new Uint8Array([0x50, 0x4B, 5, 6].concat(u16(0), u16(0), u16(files.length), u16(files.length), u32(csize), u32(off), u16(0)));
+    return new Blob(parts.concat(central, [end]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  function xmlEsc(t) { return String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function colName(i) { var n = '', x = i + 1; while (x > 0) { var m = (x - 1) % 26; n = String.fromCharCode(65 + m) + n; x = Math.floor((x - 1) / 26); } return n; }
+  function buildXlsx(grid, widths) {
+    var rowsXml = grid.map(function (row, ri) {
+      var cells = row.map(function (c, ci) {
+        if (c == null || c.v === '' || c.v == null) return c && c.s ? '<c r="' + colName(ci) + (ri + 1) + '" s="' + c.s + '"/>' : '';
+        var ref = colName(ci) + (ri + 1), st = c.s ? ' s="' + c.s + '"' : '';
+        return typeof c.v === 'number'
+          ? '<c r="' + ref + '"' + st + '><v>' + c.v + '</v></c>'
+          : '<c r="' + ref + '" t="inlineStr"' + st + '><is><t xml:space="preserve">' + xmlEsc(c.v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (ri + 1) + '">' + cells + '</row>';
+    }).join('');
+    var cols = '<cols>' + widths.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols>';
+    var X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    var NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    return zipStore([
+      ['[Content_Types].xml', X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+      ['_rels/.rels', X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+      ['xl/workbook.xml', X + '<workbook xmlns="' + NS + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Picks" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+      ['xl/_rels/workbook.xml.rels', X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+      ['xl/styles.xml', X + '<styleSheet xmlns="' + NS + '"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFBEFC8"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFCDEBD6"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE3EE"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/></cellXfs></styleSheet>'],
+      ['xl/worksheets/sheet1.xml', X + '<worksheet xmlns="' + NS + '"><sheetViews><sheetView workbookViewId="0"><pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>' + cols + '<sheetData>' + rowsXml + '</sheetData></worksheet>']
+    ]);
+  }
+  function exportXlsx() {
+    var rows = ranked(), list = qs();
+    var head = [{ v: 'Rank', s: 1 }, { v: 'Player', s: 1 }, { v: 'Points', s: 1 }]
+      .concat(list.map(function (q, i) { return { v: 'Q' + (i + 1) + ': ' + q.text, s: 1 }; }))
+      .concat([{ v: teamA() + ' score guess', s: 1 }, { v: teamB() + ' score guess', s: 1 }]);
+    var ans = [{ v: '', s: 2 }, { v: 'ANSWERS', s: 2 }, { v: '', s: 2 }]
+      .concat(list.map(function (q) { var a = answerOf(q); return { v: a === null ? '' : (opts(q)[a] || ''), s: 2 }; }))
+      .concat([{ v: typeof results.tbA === 'number' ? results.tbA : '', s: 2 }, { v: typeof results.tbB === 'number' ? results.tbB : '', s: 2 }]);
+    var body = rows.map(function (r) {
+      var pk = r.e.picks || {};
+      return [{ v: r.rank }, { v: r.e.name || 'Unnamed' }, { v: r.pts }]
+        .concat(list.map(function (q) {
+          var x = pk[q.id], a = answerOf(q);
+          return { v: Number.isInteger(x) ? (opts(q)[x] || '') : '', s: a !== null && x === a ? 3 : 0 };
+        }))
+        .concat([{ v: typeof r.e.tbA === 'number' ? r.e.tbA : '' }, { v: typeof r.e.tbB === 'number' ? r.e.tbB : '' }]);
+    });
+    var widths = [7, 20, 9].concat(list.map(function () { return 26; })).concat([16, 16]);
+    var blob = buildXlsx([head, ans].concat(body), widths);
+    var name = String((game && game.title) || 'picks').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'picks';
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name + '-picks.xlsx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    toast('Spreadsheet downloaded');
+  }
+
   function hostEntries() {
     var box = h('div', { class: 'stack' });
     var list = entries.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
@@ -1679,6 +1968,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           cl.phones.length ? h('button', { class: 'btn ghost small', type: 'button', text: 'Copy phones (' + cl.phones.length + ')', onclick: function () { copyText(cl.phones.join(', '), 'Phone numbers copied'); } }) : null,
           h('button', { class: 'btn ghost small', type: 'button', text: 'Copy names + contacts', onclick: function () { copyText(cl.all.join('\n'), 'Copied'); } })) : null));
     }
+    if (list.length) box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', text: 'Export to Excel', onclick: exportXlsx }),
+      h('span', { class: 'hint', text: 'One row per player, with an Answers row at the top. Contact details are not included.' })));
     if (!list.length) box.append(note('No entries yet', 'Share the site link. Nobody needs an account to enter.'));
     list.forEach(function (e) {
       var confirming = confirmId === e.id;
@@ -1753,7 +2044,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!name) { toast('Give the pool a name.'); return; }
     var id = newPoolId();
     var g = { title: name, locked: false, tiebreak: 'Tiebreaker: predict the final score', teamA: 'Team A', teamB: 'Team B', questions: [] };
-    var introText = '';
+    var introText = '', introImg = '';
     var extra = {};
     var srcKey = poolForm.source;
     try {
@@ -1764,6 +2055,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         var si = await rootDb.doc(base + 'config/intro').get();
         if (sg.exists) g = cloneGame(sg.data(), name);
         introText = si.exists ? (si.data().text || '') : '';
+        introImg = si.exists ? (si.data().img || '') : '';
         var names = ['qimg', 'config/trophy', 'hof', 'hofResults'];
         for (var k = 0; k < names.length; k++) {
           var sn = await rootDb.doc(base + names[k]).get();
@@ -1772,7 +2064,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       } else if (srcKey.indexOf('v:') === 0) {
         var v = versionList.find(function (x) { return x.id === srcKey.slice(2); });
         if (v) {
-          g = cloneGame(v.game, name); introText = v.intro || '';
+          g = cloneGame(v.game, name); introText = v.intro || ''; introImg = v.introImg || '';
           if (v.qimg) extra['qimg'] = v.qimg;
           if (v.trophy) extra['config/trophy'] = v.trophy;
           if (v.hof) extra['hof'] = v.hof;
@@ -1782,7 +2074,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     } catch (e) { toast("Couldn't read that pool to copy it."); return; }
     var ok = await enqueue(async function () {
       await rootDb.doc('pools/' + id + '/config/game').set(g);
-      if (introText) await rootDb.doc('pools/' + id + '/config/intro').set({ text: introText, at: Date.now() });
+      if (introText || introImg) { var idoc = { text: introText, at: Date.now() }; if (introImg) idoc.img = introImg; await rootDb.doc('pools/' + id + '/config/intro').set(idoc); }
       var keys = Object.keys(extra);
       for (var i = 0; i < keys.length; i++) await rootDb.doc('pools/' + id + '/' + keys[i]).set(extra[keys[i]]);
       await rootDb.doc('index/' + id).set({ name: name, createdAt: Date.now(), archived: false });
@@ -1804,7 +2096,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     try { var sr = await db.doc('hofResults').get(); hr = sr.exists ? sr.data() : null; } catch (e) {}
     var ok = await enqueue(function () {
       return rootDb.doc('versions/' + id).set({
-        name: name, savedAt: Date.now(), game: cloneGame(game), intro: (intro && intro.text) || '',
+        name: name, savedAt: Date.now(), game: cloneGame(game), intro: (intro && intro.text) || '', introImg: (intro && intro.img) || null,
         qimg: Object.keys(qm).length ? qm : null, trophy: trophy ? { img: trophy } : null,
         hof: Object.keys(hm).length ? hm : null, hofResults: hr
       });
