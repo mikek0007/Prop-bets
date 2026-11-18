@@ -218,6 +218,11 @@ a.linkbtn{display:inline-block}
 .tswatch{display:grid;gap:4px;justify-items:center;font:600 12px var(--body);color:var(--ink-2);background:none;border:0;padding:0;cursor:pointer}
 .tswatch i{display:block;width:44px;height:44px;border-radius:50%;border:3px solid var(--line)}
 .tswatch[aria-pressed="true"] i{border-color:var(--ink);box-shadow:inset 0 0 0 3px var(--surface)}
+.tick{display:inline-flex;color:var(--good);vertical-align:middle}
+.tick svg{width:18px;height:18px;display:block}
+.bqrow .rank{display:inline-flex;align-items:center;gap:4px}
+.cnote{border:2px solid var(--accent);background:var(--accent-bg)}
+.cnote h2{margin:0;font:800 20px/1.1 var(--display);text-transform:uppercase;letter-spacing:.03em}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -319,7 +324,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   var expanded = new Set();
   var edit = null;
   var chat = [], chatList = null, chatSeen = Number(lsGet('chatSeen')) || 0;
-  var intro = null, introEditing = false, introDraft = '';
+  var intro = null, introEditing = false, introDraft = '', committee = null, hostNote = null, noteEdit = null;
   var pid = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
   if (!/^[a-z0-9]{3,24}$/.test(pid)) pid = '';
   var rootDb = null, poolList = [], versionList = [], poolsLoaded = false, hostSubs = false;
@@ -743,7 +748,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     );
   }
   function renderTabs() {
-    var items = [['intro', 'Intro'], ['entry', 'Your picks'], ['board', 'Leaderboard'], ['chat', 'Trash Talk'], ['fame', 'Hall of Fame']];
+    var items = [['intro', 'Welcome'], ['entry', 'Your picks'], ['board', 'Leaderboard'], ['chat', 'Trash Talk'], ['fame', 'Hall of Fame']];
     if (canEdit) items.push(['host', 'Host']);
     var latest = chat.length ? (chat[chat.length - 1].ts || 0) : 0;
     if (view === 'chat' && latest > chatSeen) { chatSeen = latest; lsSet('chatSeen', String(latest)); }
@@ -791,8 +796,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       var ta = h('textarea', { id: 'intro-text', rows: 16, value: introDraft,
         oninput: function (ev) { introDraft = ev.target.value; } });
       root.append(h('div', { class: 'card stack' },
-        h('div', { class: 'lbl' }, 'Intro image', h('small', { text: 'Optional. It shows at the top of the intro page. It saves right away.' })),
-        img ? h('img', { class: 'introimg', src: img, alt: 'Intro image' }) : null,
+        h('div', { class: 'lbl' }, 'Welcome image', h('small', { text: 'Optional. It shows at the top of the Welcome page. It saves right away.' })),
+        img ? h('img', { class: 'introimg', src: img, alt: 'Welcome image' }) : null,
         h('div', { class: 'qedit-tools' },
           fileBtn(img ? 'Change image' : 'Add image', async function (f) {
             try {
@@ -806,22 +811,28 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
             if (ok) toast('Image removed');
           } }) : null)));
       root.append(h('div', { class: 'card stack' },
-        h('label', { class: 'lbl', for: 'intro-text' }, 'Intro text',
+        h('label', { class: 'lbl', for: 'intro-text' }, 'Welcome text',
           h('small', { text: 'Blank lines start a new paragraph.' }), ta),
         h('div', { class: 'qedit-tools' },
-          h('button', { class: 'btn small', type: 'button', text: 'Save intro', onclick: async function () {
+          h('button', { class: 'btn small', type: 'button', text: 'Save welcome', onclick: async function () {
             var ok = await enqueue(function () { return db.doc('config/intro').update({ text: introDraft.trim(), at: Date.now() }); });
-            if (ok) { introEditing = false; toast('Intro saved'); render(); }
+            if (ok) { introEditing = false; toast('Welcome saved'); render(); }
           } }),
           h('button', { class: 'btn ghost small', type: 'button', text: 'Cancel', onclick: function () { introEditing = false; render(); } }))));
       return root;
     }
-    if (img) root.append(h('img', { class: 'introimg', src: img, alt: 'Intro image' }));
+    if (img) root.append(h('img', { class: 'introimg', src: img, alt: 'Welcome image' }));
     if (text) root.append(h('div', { class: 'card' }, h('div', { class: 'introtext', text: text })));
-    if (!text && !img) root.append(note('No intro yet', canEditIntro ? 'Tap Edit intro to write a welcome message.' : 'The host has not posted an intro yet.'));
+    if (!text && !img) root.append(note('No welcome message yet', canEditIntro ? 'Tap Edit welcome to write a welcome message.' : 'The host has not posted a welcome message yet.'));
+    if (results.final && committee && committee.text) {
+      root.append(h('div', { class: 'card stack cnote' },
+        h('h2', { text: 'Notes from the Prop Bet Committee' }),
+        h('div', { class: 'introtext', text: committee.text }),
+        h('div', { class: 'submit' }, h('a', { class: 'btn link', href: '#fame', text: 'Go to Hall of Fame' }))));
+    }
     root.append(h('div', { class: 'submit' },
       h('a', { class: 'btn link', href: '#entry', text: 'Make your picks' }),
-      canEditIntro ? h('button', { class: 'btn ghost small', type: 'button', text: 'Edit intro',
+      canEditIntro ? h('button', { class: 'btn ghost small', type: 'button', text: 'Edit welcome',
         onclick: function () { introDraft = text; introEditing = true; render(); } }) : null));
     return root;
   }
@@ -1098,6 +1109,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     return box;
   }
 
+  function tickEl() {
+    var t = h('span', { class: 'tick', role: 'img', 'aria-label': 'Answered' });
+    t.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M6.5 12.5l3.8 3.8 7.2-8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return t;
+  }
+
   function byQuestion(rows) {
     var list = qs();
     var box = h('div', { class: 'stack' });
@@ -1117,7 +1134,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           if (again) again.focus();
         }
       },
-        h('span', { class: 'rank', text: 'Q' + (qi + 1) }),
+        h('span', { class: 'rank' }, 'Q' + (qi + 1), a === null ? null : tickEl()),
         h('span', { class: 'wtext' }, h('span', { class: 'name', text: q.text }),
           h('span', { class: 'hint', text: a === null ? 'Not marked yet' : 'Answer: ' + (opts(q)[a] || '') })),
         h('span', { class: 'pts' }, a === null || !total ? '—' : Math.round(rightN / total * 100) + '%', h('small', { text: a === null ? '' : 'right' }))));
@@ -1606,8 +1623,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     chatList = h('div', { class: 'chatlist', role: 'log', 'aria-live': 'polite', 'aria-label': 'Chat messages' });
     root.append(chatList);
     paintChat(true);
+    var goBoard = h('div', { class: 'submit' }, h('a', { class: 'btn ghost link', href: '#board', text: 'Go to leaderboard' }));
     if (!uid) {
       root.append(note('Connecting', 'One moment while chat connects.'));
+      root.append(goBoard);
       return root;
     }
     var msg = h('input', { type: 'text', id: 'c-msg', maxLength: 280, autocomplete: 'off', placeholder: 'Say something', 'aria-label': 'Message' });
@@ -1618,6 +1637,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     }
     form.append(h('div', { class: 'send' }, msg, h('button', { class: 'btn', type: 'submit', text: 'Send' })));
     root.append(form);
+    root.append(goBoard);
     return root;
   }
 
@@ -1643,12 +1663,50 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var sub = locked ? 'Nobody can add or change picks.'
       : game.lockAt ? 'Entries close automatically ' + fmtWhen(game.lockAt) + '.'
       : 'People can still add or change picks.';
-    return h('div', { class: 'card toggle' },
+    return h('div', { class: 'card stack' },
       h('div', {},
         h('strong', { text: locked ? 'Entries are closed' : 'Entries are open' }),
-        h('p', { class: 'status', text: sub })),
-      h('button', { class: locked ? 'btn ghost' : 'btn', type: 'button', text: locked ? 'Reopen entries' : 'Close entries now',
-        onclick: function () { saveGame(locked ? { locked: false, lockAt: null } : { locked: true }); } }));
+        h('p', { class: 'status', text: sub }),
+        h('p', { class: 'status', text: results.final ? 'Game is final. The leaderboard shows the winner.' : 'Game in progress. Mark it final when the last answer is in.' })),
+      h('div', { class: 'qedit-tools' },
+        h('button', { class: locked ? 'btn ghost' : 'btn', type: 'button', text: locked ? 'Reopen entries' : 'Close entries now',
+          onclick: function () { saveGame(locked ? { locked: false, lockAt: null } : { locked: true }); } }),
+        h('button', { class: results.final ? 'btn ghost' : 'btn', type: 'button', text: results.final ? 'Reopen game' : 'Mark final', onclick: toggleFinal })));
+  }
+  function toggleFinal() {
+    var next = !results.final;
+    var text = ((noteEdit != null ? noteEdit : (hostNote && hostNote.text)) || '').trim();
+    results = Object.assign({}, results, { final: next });
+    renderSoon();
+    return enqueue(async function () {
+      var ref = db.doc('config/results');
+      if (resultsExists) await ref.update({ final: next }); else { await ref.set(results); resultsExists = true; }
+      if (next && text) {
+        await db.doc('hostnotes/note').set({ text: text, at: Date.now() });
+        await db.doc('config/note').set({ text: text, at: Date.now() });
+      } else if (!next) {
+        await db.doc('config/note').delete();
+      }
+    });
+  }
+  function noteCard() {
+    var cur = noteEdit != null ? noteEdit : ((hostNote && hostNote.text) || '');
+    var ta = h('textarea', { id: 'n-text', rows: 6, maxLength: 3000, value: cur,
+      oninput: function (ev) { noteEdit = ev.target.value; } });
+    return h('div', { class: 'card stack' },
+      h('label', { class: 'lbl', for: 'n-text' }, 'Notes from the Prop Bet Committee',
+        h('small', { text: results.final
+          ? 'Guests can read this on the Welcome page now. Saving updates it.'
+          : 'Write it any time. Guests only see it on the Welcome page after you mark the game final.' }), ta),
+      h('div', { class: 'qedit-tools' },
+        h('button', { class: 'btn small', type: 'button', text: 'Save note', onclick: async function () {
+          var text = (noteEdit != null ? noteEdit : cur).trim();
+          var ok = await enqueue(async function () {
+            if (text) await db.doc('hostnotes/note').set({ text: text, at: Date.now() }); else await db.doc('hostnotes/note').delete();
+            if (results.final) { if (text) await db.doc('config/note').set({ text: text, at: Date.now() }); else await db.doc('config/note').delete(); }
+          });
+          if (ok) { noteEdit = null; toast(results.final ? 'Note saved and showing' : 'Note saved'); render(); }
+        } })));
   }
 
   function setAnswer(qid, val) {
@@ -1713,12 +1771,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
               value: typeof results.tbB === 'number' ? String(results.tbB) : '',
               onchange: function (ev) { saveResults({ tbB: ev.target.value === '' ? null : Number(ev.target.value) }); } })))));
     }
-    box.append(h('div', { class: 'card toggle' },
-      h('div', {},
-        h('strong', { text: results.final ? 'Game is final' : 'Game in progress' }),
-        h('p', { class: 'status', text: results.final ? 'The leaderboard shows the winner.' : 'Mark it final when the last answer is in.' })),
-      h('button', { class: 'btn ghost', type: 'button', text: results.final ? 'Reopen' : 'Mark final',
-        onclick: function () { saveResults({ final: !results.final }); } })));
+    box.append(noteCard());
     return box;
   }
 
@@ -2477,13 +2530,17 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   async function hostSignOut() {
     try { await rootDb.doc('hostSessions/' + auth.currentUser.uid).delete(); } catch (e) { toast("Couldn't sign out. Check your connection and try again."); return; }
-    hostSubs = false; contactSubs = false; contactMap = {}; legacyFame = undefined;
+    hostSubs = false; contactSubs = false; contactMap = {}; hostNote = null; noteEdit = null; legacyFame = undefined;
     poolList = []; versionList = []; poolsLoaded = false;
     await applyUser(auth.currentUser);
   }
   function startPoolHostSubs() {
     if (contactSubs || !db || !pid) return;
     contactSubs = true;
+    db.doc('hostnotes/note').onSnapshot(function (s) {
+      hostNote = s.exists ? s.data() : null;
+      renderSoon();
+    }, function () {});
     db.collection('contacts').onSnapshot(function (s) {
       contactMap = {};
       s.docs.forEach(function (d) { contactMap[d.id] = d.data(); });
@@ -2578,6 +2635,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     db.doc('config/trophy').onSnapshot(function (s) {
       var v = s.exists ? s.data() : null;
       trophy = v && v.img ? v.img : null;
+      renderSoon();
+    }, function () {});
+    db.doc('config/note').onSnapshot(function (s) {
+      committee = s.exists ? s.data() : null;
       renderSoon();
     }, function () {});
     db.doc('config/intro').onSnapshot(function (s) {
