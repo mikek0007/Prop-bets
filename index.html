@@ -223,7 +223,22 @@ a.linkbtn{display:inline-block}
 .bqrow .rank{display:inline-flex;align-items:center;gap:4px}
 .cnote{border:2px solid var(--accent);background:var(--accent-bg)}
 .cnote h2{margin:0;font:800 20px/1.1 var(--display);text-transform:uppercase;letter-spacing:.03em}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.reacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center}
+.rx{display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:2px 9px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);font:600 14px var(--body);cursor:pointer}
+.rx[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent)}
+.rx.add{color:var(--ink-2)}
+.helm{display:inline-flex;vertical-align:middle;flex:none}
+.helm svg{display:block}
+.meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;color:var(--ink-2)}
+.celebrate{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:rgba(10,18,38,.85);overflow:hidden}
+.celebrate .cbox{position:relative;z-index:1;max-width:340px;width:100%;text-align:center;display:grid;gap:12px;justify-items:center;padding:24px;border-radius:14px;background:var(--surface);border:3px solid var(--accent)}
+.celebrate h2{margin:0;font:800 28px/1.1 var(--display);text-transform:uppercase;letter-spacing:.03em}
+.celebrate .names{font:700 22px/1.2 var(--body);color:var(--ink)}
+.confetti i{position:absolute;top:-20px;width:9px;height:16px;opacity:.9;animation:cfall linear forwards}
+@keyframes cfall{to{transform:translate3d(var(--dx),115vh,0) rotate(720deg)}}
+.cd{display:grid;gap:4px;text-align:center;border:2px solid var(--accent);background:var(--accent-bg)}
+.cd .big{font:800 32px/1.1 var(--display);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.confetti i{display:none}*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -324,7 +339,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   var expanded = new Set();
   var edit = null;
   var chat = [], chatList = null, chatSeen = Number(lsGet('chatSeen')) || 0;
-  var intro = null, introEditing = false, introDraft = '', committee = null, hostNote = null, noteEdit = null;
+  var intro = null, introEditing = false, introDraft = '', committee = null, hostNote = null, noteEdit = null, reacts = {}, rxOpen = null, celebrating = false;
   var pid = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
   if (!/^[a-z0-9]{3,24}$/.test(pid)) pid = '';
   var rootDb = null, poolList = [], versionList = [], poolsLoaded = false, hostSubs = false;
@@ -587,6 +602,37 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   ICONS.slow = `<path class="o" d="M4 40 H40 Q44 40 44 36 Q44 32 40 32 H12Z" fill="#E9C99B"/><circle class="o" cx="26" cy="26" r="12" fill="#8A4B24"/><path class="ln" style="stroke:#F4C9A0;stroke-width:2.5" d="M26 26 a3 3 0 1 1 3 3 a6 6 0 1 1 -6 -6"/><path class="ln" d="M7 34 L5 24 M12 34 L12 24"/><circle cx="5" cy="23" r="2.6" fill="#fff" stroke="#13203A" stroke-width="1.5"/><circle cx="12" cy="23" r="2.6" fill="#fff" stroke="#13203A" stroke-width="1.5"/>`;
   ICONS.darkhorse = `<path class="o" d="M10 6 V24 A14 14 0 0 0 38 24 V6 H30 V24 A6 6 0 0 1 18 24 V6Z" fill="#4A4F63"/><circle cx="14" cy="14" r="1.8" fill="#E9EDF5"/><circle cx="34" cy="14" r="1.8" fill="#E9EDF5"/><circle cx="14" cy="23" r="1.8" fill="#E9EDF5"/><circle cx="34" cy="23" r="1.8" fill="#E9EDF5"/>`;
   ICONS.sport = `<path class="o" d="M16 28 L10 45 L19 41 L22 30Z" fill="#5BC0EB"/><path class="o" d="M32 28 L38 45 L29 41 L26 30Z" fill="#5BC0EB"/><circle class="o" cx="24" cy="20" r="15" fill="#6BCB77"/>${eyes(24, 18, 9, 2.6, 0, 1)}<path class="ln" d="M17 25 Q24 31 31 25"/>`;
+  var NFL = [
+    ['ARI', 'Arizona Cardinals', '#97233F', '#FFB612'], ['ATL', 'Atlanta Falcons', '#A71930', '#111111'], ['BAL', 'Baltimore Ravens', '#241773', '#9E7C0C'],
+    ['BUF', 'Buffalo Bills', '#00338D', '#C60C30'], ['CAR', 'Carolina Panthers', '#0085CA', '#101820'], ['CHI', 'Chicago Bears', '#0B162A', '#C83803'],
+    ['CIN', 'Cincinnati Bengals', '#FB4F14', '#111111'], ['CLE', 'Cleveland Browns', '#311D00', '#FF3C00'], ['DAL', 'Dallas Cowboys', '#003594', '#869397'],
+    ['DEN', 'Denver Broncos', '#FB4F14', '#002244'], ['DET', 'Detroit Lions', '#0076B6', '#B0B7BC'], ['GB', 'Green Bay Packers', '#203731', '#FFB612'],
+    ['HOU', 'Houston Texans', '#03202F', '#A71930'], ['IND', 'Indianapolis Colts', '#002C5F', '#A2AAAD'], ['JAX', 'Jacksonville Jaguars', '#006778', '#D7A22A'],
+    ['KC', 'Kansas City Chiefs', '#E31837', '#FFB81C'], ['LV', 'Las Vegas Raiders', '#111111', '#A5ACAF'], ['LAC', 'Los Angeles Chargers', '#0080C6', '#FFC20E'],
+    ['LAR', 'Los Angeles Rams', '#003594', '#FFA300'], ['MIA', 'Miami Dolphins', '#008E97', '#FC4C02'], ['MIN', 'Minnesota Vikings', '#4F2683', '#FFC62F'],
+    ['NE', 'New England Patriots', '#002244', '#C60C30'], ['NO', 'New Orleans Saints', '#D3BC8D', '#101820'], ['NYG', 'New York Giants', '#0B2265', '#A71930'],
+    ['NYJ', 'New York Jets', '#125740', '#111111'], ['PHI', 'Philadelphia Eagles', '#004C54', '#A5ACAF'], ['PIT', 'Pittsburgh Steelers', '#101820', '#FFB612'],
+    ['SF', 'San Francisco 49ers', '#AA0000', '#B3995D'], ['SEA', 'Seattle Seahawks', '#002244', '#69BE28'], ['TB', 'Tampa Bay Buccaneers', '#D50A0A', '#34302B'],
+    ['TEN', 'Tennessee Titans', '#0C2340', '#4B92DB'], ['WAS', 'Washington Commanders', '#5A1414', '#FFB612']
+  ];
+  function teamInfo(key) {
+    key = String(key || '');
+    if (key.indexOf('x:') === 0) { var t = key.slice(2).trim(); return t ? { name: t, a: '#8C95A8', b: '#E9EDF5' } : null; }
+    for (var i = 0; i < NFL.length; i++) if (NFL[i][0] === key) return { name: NFL[i][1], a: NFL[i][2], b: NFL[i][3] };
+    return null;
+  }
+  function helmetEl(key, px) {
+    var t = teamInfo(key) || { name: '', a: '#8C95A8', b: '#E9EDF5' };
+    var sp = h('span', { class: 'helm', 'aria-hidden': 'true' });
+    sp.innerHTML = '<svg viewBox="0 0 52 48" width="' + px + '" height="' + Math.round(px * 48 / 52) + '" focusable="false"><path d="M8 31 C8 15 18 8 28 8 C39 8 45 16 45 27 L45 31 C45 34 43 35 41 35 H34 L32 42 H23 C13 42 8 38 8 31Z" fill="' + t.a + '" stroke="#13203A" stroke-width="2.2" stroke-linejoin="round"/><path d="M26 8.4 H31 L31.5 24 H25.5Z" fill="' + t.b + '" stroke="#13203A" stroke-width="1.4" stroke-linejoin="round"/><circle cx="17" cy="28" r="3" fill="#13203A"/><path d="M43 24 H49 M43 30 H49 M48 24 V36 H38" fill="none" stroke="#9AA4B8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return sp;
+  }
+  function metaLine(e) {
+    var t = teamInfo(e && e.team), loc = String((e && e.loc) || '').trim();
+    if (!t && !loc) return null;
+    return h('span', { class: 'meta' }, t ? helmetEl(e.team, 20) : null, t ? h('span', { text: t.name }) : null,
+      t && loc ? h('span', { text: '·', 'aria-hidden': 'true' }) : null, loc ? h('span', { text: loc }) : null);
+  }
   var NEG_BADGES = { trash: 1, dive: 1, ice: 1, heart: 1, tough: 1 };
   var BADGES = {
     early: 'Early Bird', closer: 'Closer', sharp: 'Sharpshooter', contra: 'Contrarian', bounce: 'Bounce Back', iron: 'Iron Man',
@@ -704,6 +750,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       draft.tbB = typeof mine.tbB === 'number' ? String(mine.tbB) : '';
       draft.trash = mine.trash || '';
       if (!draft.photoTouched) draft.photo = mine.photo || '';
+      draft.team = mine.team || ''; draft.loc = mine.loc || '';
     }
   }
   function resetDraft() {
@@ -753,10 +800,14 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var latest = chat.length ? (chat[chat.length - 1].ts || 0) : 0;
     if (view === 'chat' && latest > chatSeen) { chatSeen = latest; lsSet('chatSeen', String(latest)); }
     var unread = chat.some(function (m) { return (m.ts || 0) > chatSeen && m.uid !== uid; });
+    var noteAt = committee && committee.text ? (committee.at || 1) : 0;
+    if (view === 'intro' && noteAt && noteAt > (Number(lsGet(noteSeenKey())) || 0)) lsSet(noteSeenKey(), String(noteAt));
+    var noteNew = view !== 'intro' && noteAt > (Number(lsGet(noteSeenKey())) || 0);
     $tabs.replaceChildren.apply($tabs, items.map(function (it) {
       return h('a', { href: '#' + it[0], 'aria-current': view === it[0] ? 'page' : null,
           onclick: function (ev) { if (it[0] !== view && !leaveOk()) ev.preventDefault(); } },
-        it[1], it[0] === 'chat' && unread ? h('span', { class: 'dot', 'aria-label': 'new messages' }) : null);
+        it[1], it[0] === 'chat' && unread ? h('span', { class: 'dot', 'aria-label': 'new messages' }) : null,
+        it[0] === 'intro' && noteNew ? h('span', { class: 'dot', 'aria-label': 'new note' }) : null);
     }));
   }
 
@@ -769,6 +820,45 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     chatList = null;
     var body = view === 'intro' ? renderIntro() : view === 'fame' ? renderFame() : view === 'board' ? renderBoard() : view === 'chat' ? renderChat() : view === 'host' ? renderHost() : renderEntry();
     $app.replaceChildren(body);
+    maybeCelebrate();
+  }
+  function maybeCelebrate() {
+    if (celebrating || !pid || !results.final || !loaded.entries || !entries.length || lsGet('nocelebrate')) return;
+    var win = ranked().filter(function (r) { return r.rank === 1; });
+    if (!win.length) return;
+    var key = 'celebrated:' + pid, sig = win.map(function (r) { return r.e.id; }).join(',');
+    if (lsGet(key) === sig) return;
+    celebrating = true;
+    var ov = h('div', { class: 'celebrate', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'We have a winner' });
+    var conf = h('div', { class: 'confetti', 'aria-hidden': 'true' });
+    var cols = ['#E8A700', '#D23A2E', '#2457D6', '#1F7A45', '#B79CF0', '#FFFFFF'];
+    for (var i = 0; i < 44; i++) {
+      var c = h('i');
+      c.style.left = (Math.random() * 100) + '%';
+      c.style.background = cols[i % cols.length];
+      c.style.setProperty('--dx', Math.round(Math.random() * 160 - 80) + 'px');
+      c.style.animationDuration = (3 + Math.random() * 3.5).toFixed(2) + 's';
+      c.style.animationDelay = (Math.random() * 1.8).toFixed(2) + 's';
+      conf.append(c);
+    }
+    function close(go) {
+      ov.remove(); celebrating = false; lsSet(key, sig);
+      if (go) { location.hash = 'board'; }
+    }
+    var names = win.map(function (r) { return r.e.name || 'Unnamed'; }).join(' and ');
+    var closeBtn = h('button', { class: 'btn ghost small', type: 'button', text: 'Close', onclick: function () { close(false); } });
+    ov.append(conf, h('div', { class: 'cbox' },
+      iconEl('trophy'),
+      h('h2', { text: win.length > 1 ? 'We have winners!' : 'We have a winner!' }),
+      win.length === 1 ? miniAvatar(win[0].e.photo, win[0].e.name, 'big') : null,
+      h('div', { class: 'names', text: names }),
+      win.length === 1 && teamInfo(win[0].e.team) ? h('span', { class: 'meta' }, helmetEl(win[0].e.team, 22), h('span', { text: teamInfo(win[0].e.team).name })) : null,
+      h('div', { class: 'hint', text: win[0].pts + (win[0].pts === 1 ? ' point' : ' points') }),
+      h('button', { class: 'btn', type: 'button', text: 'See the leaderboard', onclick: function () { close(true); } }),
+      closeBtn));
+    ov.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') close(false); });
+    document.body.append(ov);
+    closeBtn.focus();
   }
   function renderSoon() {
     var a = document.activeElement;
@@ -785,12 +875,36 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
   /* ---------- intro ---------- */
 
+  function cdText(t) {
+    var ms = t - Date.now();
+    if (ms <= 0) return "It's anthem time!";
+    var sec = Math.floor(ms / 1000), d = Math.floor(sec / 86400), hh = Math.floor(sec % 86400 / 3600), mm = Math.floor(sec % 3600 / 60), ss = sec % 60;
+    function p2(n) { return String(n).padStart(2, '0'); }
+    return (d ? d + 'd ' : '') + p2(hh) + 'h ' + p2(mm) + 'm ' + p2(ss) + 's';
+  }
+  function countdownEl() {
+    var t = game && game.anthemAt;
+    if (!t || Date.now() > t + 3 * 3600000) return null;
+    return h('div', { class: 'card cd', role: 'timer' },
+      h('div', { class: 'hint', id: 'cd-label', text: Date.now() < t ? 'Until the National Anthem' : '' }),
+      h('div', { class: 'big', id: 'cd-time', text: cdText(t) }),
+      h('div', { class: 'hint', text: Date.now() < t ? 'Get your picks in before it starts.' : 'Good luck everyone.' }));
+  }
+  setInterval(function () {
+    var el = document.getElementById('cd-time');
+    if (!el || !game || !game.anthemAt) return;
+    el.textContent = cdText(game.anthemAt);
+    var lb = document.getElementById('cd-label');
+    if (lb) lb.textContent = Date.now() < game.anthemAt ? 'Until the National Anthem' : '';
+  }, 1000);
+
   function renderIntro() {
     if (!db) return noAccess();
     if (!loaded.intro) return loadingNote();
     var root = h('div', { class: 'stack' });
     var text = (intro && intro.text) || '';
     var img = (intro && intro.img) || '';
+    if (!(introEditing && canEdit)) root.append(countdownEl());
     var canEditIntro = canEdit;
     if (introEditing && canEditIntro) {
       var ta = h('textarea', { id: 'intro-text', rows: 16, value: introDraft,
@@ -824,7 +938,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (img) root.append(h('img', { class: 'introimg', src: img, alt: 'Welcome image' }));
     if (text) root.append(h('div', { class: 'card' }, h('div', { class: 'introtext', text: text })));
     if (!text && !img) root.append(note('No welcome message yet', canEditIntro ? 'Tap Edit welcome to write a welcome message.' : 'The host has not posted a welcome message yet.'));
-    if (results.final && committee && committee.text) {
+    if (committee && committee.text) {
       root.append(h('div', { class: 'card stack cnote' },
         h('h2', { text: 'Notes from the Prop Bet Committee' }),
         h('div', { class: 'introtext', text: committee.text }),
@@ -875,9 +989,18 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!readOnly && game.lockAt && !isLocked()) {
       root.append(h('p', { class: 'hint', text: 'Entries close ' + fmtWhen(game.lockAt) + '.' }));
     }
+    var teamOther = String(draft.team || '').indexOf('x:') === 0;
+    var teamSel = h('select', { id: 'f-team', disabled: readOnly, onchange: function (ev) {
+      var v = ev.target.value;
+      draft.team = v === 'x' ? 'x:' : v; draft.touched = true; render();
+    } }, [h('option', { value: '', text: 'No favorite' })]
+      .concat(NFL.map(function (t) { return h('option', { value: t[0], text: t[1] }); }))
+      .concat([h('option', { value: 'x', text: 'Other team...' })]));
+    teamSel.value = teamOther ? 'x' : (draft.team || '');
     root.append(h('div', { class: 'card stack' },
+      h('div', { class: 'lbl' }, 'Profile', h('small', { text: 'Your name, photo, favorite team and location show next to your picks. Everyone in the pool will see them.' })),
       h('label', { class: 'lbl', for: 'f-name' },
-        guestId ? 'Their name' : 'Your name',
+        guestId ? 'Their name' : 'Name',
         h('input', { type: 'text', id: 'f-name', maxLength: 40, autocomplete: 'nickname', value: draft.name,
           placeholder: 'Shown on the leaderboard', disabled: readOnly,
           oninput: function (ev) { draft.name = ev.target.value; draft.touched = true; meta(); } })),
@@ -889,7 +1012,14 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         draft.photo && !readOnly ? h('button', { class: 'btn ghost small', type: 'button', text: 'Remove photo', onclick: function () {
           draft.photo = ''; draft.photoTouched = true; draft.touched = true; render();
         } }) : null),
-      h('p', { class: 'hint', text: 'Your photo shows next to your name on the leaderboard and in Trash Talk. Everyone in the pool will see it.' })));
+      h('label', { class: 'lbl', for: 'f-team' }, 'Favorite team (optional)',
+        h('div', { class: 'qedit-tools', style: 'align-items:center;flex-wrap:nowrap' }, helmetEl(draft.team, 40), teamSel)),
+      teamOther ? h('label', { class: 'lbl', for: 'f-team-x' }, 'Your team',
+        h('input', { type: 'text', id: 'f-team-x', maxLength: 36, value: String(draft.team).slice(2), disabled: readOnly, placeholder: 'Any team',
+          oninput: function (ev) { draft.team = 'x:' + ev.target.value; draft.touched = true; } })) : null,
+      h('label', { class: 'lbl', for: 'f-loc' }, 'Location (optional)',
+        h('input', { type: 'text', id: 'f-loc', maxLength: 40, autocomplete: 'off', value: draft.loc || '', placeholder: 'City, state', disabled: readOnly,
+          oninput: function (ev) { draft.loc = ev.target.value; draft.touched = true; } }))));
 
     var yard = yardEl();
     var count = h('span', { class: 'count' });
@@ -985,6 +1115,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         tbA: tbA,
         tbB: tbB,
         photo: draft.photo || null,
+        team: (draft.team && !/^x:\s*$/.test(draft.team)) ? String(draft.team).slice(0, 40) : null,
+        loc: (draft.loc || '').trim().slice(0, 40) || null,
         submittedAt: Date.now(),
         by: wasGuest ? 'host' : 'self'
       });
@@ -1073,7 +1205,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       },
         h('span', { class: 'rank', text: (r.tied ? 'T' : '') + r.rank }),
         h('span', { class: 'who' }, miniAvatar(r.e.photo, r.e.name),
-          h('span', { class: 'wtext' }, h('span', { class: 'name', text: r.e.name || 'Unnamed' }), badgeStrip(curStory.badges[r.e.id], 3))),
+          h('span', { class: 'wtext' }, h('span', { class: 'name', text: r.e.name || 'Unnamed' }), metaLine(r.e), badgeStrip(curStory.badges[r.e.id], 3))),
         h('span', { class: 'pts' }, String(r.pts), h('small', { text: 'pts' }))));
       if (open) root.append(detail(r));
     });
@@ -1580,6 +1712,38 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   function timeStr(ts) {
     try { return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
   }
+  var REACTS = [['up', '\ud83d\udc4d'], ['laugh', '\ud83d\ude02'], ['fire', '\ud83d\udd25'], ['wince', '\ud83d\ude2c'], ['trophy', '\ud83c\udfc6'], ['heart', '\u2764\ufe0f'], ['trash', null]];
+  function rxFace(r) { return r[1] ? h('span', { text: r[1], 'aria-hidden': 'true' }) : badgeIcon('trash', 20); }
+  function rxName(r) { return { up: 'thumbs up', laugh: 'laughing', fire: 'fire', wince: 'yikes', trophy: 'trophy', heart: 'heart', trash: 'trash can fire' }[r[0]]; }
+  function toggleReact(mid, key) {
+    if (!uid) { toast('One moment, still connecting.'); return; }
+    rxOpen = null;
+    var mine = !!(reacts[mid] && reacts[mid][key] && reacts[mid][key][uid]);
+    var ref = db.doc('reactions/' + mid + '/' + key + '/' + uid);
+    (mine ? ref.delete() : ref.set(true)).then(null, function () { toast("Couldn't add that reaction."); });
+    paintChat(false);
+  }
+  function reactRow(m) {
+    var mr = reacts[m.id] || {};
+    var row = h('div', { class: 'reacts' });
+    REACTS.forEach(function (r) {
+      var who = mr[r[0]] ? Object.keys(mr[r[0]]) : [];
+      if (!who.length) return;
+      var mine = !!(uid && mr[r[0]][uid]);
+      row.append(h('button', { class: 'rx', type: 'button', 'aria-pressed': String(mine), 'aria-label': rxName(r) + ', ' + who.length + (mine ? ', you reacted' : ''),
+        onclick: function () { toggleReact(m.id, r[0]); } }, rxFace(r), h('span', { text: String(who.length) })));
+    });
+    row.append(h('button', { class: 'rx add', type: 'button', 'aria-label': 'Add a reaction', 'aria-expanded': String(rxOpen === m.id), text: rxOpen === m.id ? 'Close' : '+ React',
+      onclick: function () { rxOpen = rxOpen === m.id ? null : m.id; paintChat(false); } }));
+    if (rxOpen === m.id) {
+      REACTS.forEach(function (r) {
+        var mine = !!(uid && mr[r[0]] && mr[r[0]][uid]);
+        row.append(h('button', { class: 'rx', type: 'button', 'aria-pressed': String(mine), 'aria-label': rxName(r),
+          onclick: function () { toggleReact(m.id, r[0]); } }, rxFace(r)));
+      });
+    }
+    return row;
+  }
   function msgEl(m) {
     var mine = !!uid && m.uid === uid;
     var sender = entries.find(function (x) { return x.id === m.uid; });
@@ -1587,12 +1751,14 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       h('div', { class: 'mhead' },
         miniAvatar(sender && sender.photo, m.name, 'sm'),
         h('span', { class: 'mname', text: m.name || 'Someone' }),
+        sender && teamInfo(sender.team) ? helmetEl(sender.team, 20) : null,
         h('span', { class: 'mtime', text: m.ts ? timeStr(m.ts) : '' }),
         isOwner ? h('button', { class: 'mdel', type: 'button', text: 'Remove', 'aria-label': 'Remove this message',
           onclick: function () {
             db.doc('chat/' + m.id).delete().then(null, function () { toast("Couldn't remove that message."); });
           } }) : null),
-      h('div', { class: 'mtext', text: m.text || '' }));
+      h('div', { class: 'mtext', text: m.text || '' }),
+      reactRow(m));
   }
   function paintChat(forceBottom) {
     if (!chatList) return;
@@ -1654,6 +1820,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     }).concat([h('a', { href: location.pathname, text: 'All pools' })])));
     if (!loaded.game) { root.append(loadingNote()); return root; }
     if (game) root.append(lockCard());
+    if (game && hostTab === 'setup') root.append(noteCard());
     root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'entries' ? hostEntries() : hostScore());
     return root;
   }
@@ -1673,40 +1840,59 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           onclick: function () { saveGame(locked ? { locked: false, lockAt: null } : { locked: true }); } }),
         h('button', { class: results.final ? 'btn ghost' : 'btn', type: 'button', text: results.final ? 'Reopen game' : 'Mark final', onclick: toggleFinal })));
   }
+  function noteSeenKey() { return 'noteSeen:' + pid; }
   function toggleFinal() {
     var next = !results.final;
     var text = ((noteEdit != null ? noteEdit : (hostNote && hostNote.text)) || '').trim();
+    var pub = (committee && committee.text) || '';
     results = Object.assign({}, results, { final: next });
     renderSoon();
     return enqueue(async function () {
       var ref = db.doc('config/results');
       if (resultsExists) await ref.update({ final: next }); else { await ref.set(results); resultsExists = true; }
-      if (next && text) {
-        await db.doc('hostnotes/note').set({ text: text, at: Date.now() });
-        await db.doc('config/note').set({ text: text, at: Date.now() });
-      } else if (!next) {
-        await db.doc('config/note').delete();
+      if (next && text && text !== pub) {
+        var at = Date.now();
+        await db.doc('hostnotes/note').set({ text: text, at: at });
+        await db.doc('config/note').set({ text: text, at: at });
+        lsSet(noteSeenKey(), String(at));
       }
     });
   }
+  async function saveNoteDraft(text) {
+    var ok = await enqueue(async function () {
+      if (text) await db.doc('hostnotes/note').set({ text: text, at: Date.now() }); else await db.doc('hostnotes/note').delete();
+    });
+    if (ok) { noteEdit = null; toast('Draft saved'); render(); }
+  }
+  async function publishNote(text) {
+    var at = Date.now();
+    var ok = await enqueue(async function () {
+      if (text) {
+        await db.doc('hostnotes/note').set({ text: text, at: at });
+        await db.doc('config/note').set({ text: text, at: at });
+      } else {
+        await db.doc('hostnotes/note').delete();
+        await db.doc('config/note').delete();
+      }
+    });
+    if (ok) { noteEdit = null; if (text) lsSet(noteSeenKey(), String(at)); toast(text ? 'Published to Welcome' : 'Note removed from Welcome'); render(); }
+  }
   function noteCard() {
     var cur = noteEdit != null ? noteEdit : ((hostNote && hostNote.text) || '');
+    var pub = (committee && committee.text) || '';
+    var status = !pub ? 'Not published. Guests see nothing until you tap Publish or mark the game final.'
+      : !cur.trim() ? 'Guests still see the published note. Tap Publish with the box empty to remove it.'
+      : pub === cur.trim() ? 'Published. Guests can read this on the Welcome page.'
+      : 'Guests are seeing an earlier version. Tap Update to replace it.';
     var ta = h('textarea', { id: 'n-text', rows: 6, maxLength: 3000, value: cur,
       oninput: function (ev) { noteEdit = ev.target.value; } });
     return h('div', { class: 'card stack' },
-      h('label', { class: 'lbl', for: 'n-text' }, 'Notes from the Prop Bet Committee',
-        h('small', { text: results.final
-          ? 'Guests can read this on the Welcome page now. Saving updates it.'
-          : 'Write it any time. Guests only see it on the Welcome page after you mark the game final.' }), ta),
+      h('label', { class: 'lbl', for: 'n-text' }, 'Notes from the Prop Bet Committee', h('small', { text: status }), ta),
       h('div', { class: 'qedit-tools' },
-        h('button', { class: 'btn small', type: 'button', text: 'Save note', onclick: async function () {
-          var text = (noteEdit != null ? noteEdit : cur).trim();
-          var ok = await enqueue(async function () {
-            if (text) await db.doc('hostnotes/note').set({ text: text, at: Date.now() }); else await db.doc('hostnotes/note').delete();
-            if (results.final) { if (text) await db.doc('config/note').set({ text: text, at: Date.now() }); else await db.doc('config/note').delete(); }
-          });
-          if (ok) { noteEdit = null; toast(results.final ? 'Note saved and showing' : 'Note saved'); render(); }
-        } })));
+        h('button', { class: 'btn small', type: 'button', text: pub ? 'Update Welcome' : 'Publish to Welcome',
+          onclick: function () { publishNote((noteEdit != null ? noteEdit : cur).trim()); } }),
+        h('button', { class: 'btn ghost small', type: 'button', text: 'Save draft',
+          onclick: function () { saveNoteDraft((noteEdit != null ? noteEdit : cur).trim()); } })));
   }
 
   function setAnswer(qid, val) {
@@ -1771,7 +1957,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
               value: typeof results.tbB === 'number' ? String(results.tbB) : '',
               onchange: function (ev) { saveResults({ tbB: ev.target.value === '' ? null : Number(ev.target.value) }); } })))));
     }
-    box.append(noteCard());
     return box;
   }
 
@@ -1808,6 +1993,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
             var v = ev.target.value;
             saveGame({ lockAt: v ? new Date(v).getTime() : null });
           } }))));
+
+    box.append(h('div', { class: 'card stack' },
+      h('label', { class: 'lbl', for: 'e-anthem' }, 'National Anthem start',
+        h('small', { text: 'Optional. Shows a countdown on the Welcome page. It is separate from when entries close.' }),
+        h('input', { type: 'datetime-local', id: 'e-anthem', value: toLocalInput(game && game.anthemAt),
+          onchange: function (ev) { var v = ev.target.value; saveGame({ anthemAt: v ? new Date(v).getTime() : null }); } }))));
 
     box.append(barCard());
     box.append(themeCard());
@@ -2072,7 +2263,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   function cloneGame(g, title) {
     var c = JSON.parse(JSON.stringify(g || {}));
-    delete c.locked; delete c.lockAt; delete c.sample;
+    delete c.locked; delete c.lockAt; delete c.sample; delete c.anthemAt;
     c.locked = false;
     if (title) c.title = title;
     return c;
@@ -2623,6 +2814,11 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       fameLoaded = true;
       renderSoon();
     }, function () { fameLoaded = true; renderSoon(); });
+    db.collection('reactions').onSnapshot(function (s) {
+      reacts = {};
+      s.docs.forEach(function (d) { reacts[d.id] = d.data() || {}; });
+      if (view === 'chat') paintChat(false);
+    }, function () {});
     db.collection('marks').onSnapshot(function (s) {
       marksList = s.docs.map(function (d) { return Object.assign({ k: d.id }, d.data()); });
       renderSoon();
