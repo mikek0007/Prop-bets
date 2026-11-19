@@ -221,8 +221,9 @@ a.linkbtn{display:inline-block}
 .tick{display:inline-flex;color:var(--good);vertical-align:middle}
 .tick svg{width:18px;height:18px;display:block}
 .bqrow .rank{display:inline-flex;align-items:center;gap:4px}
-.cnote{border:2px solid var(--accent);background:var(--accent-bg)}
-.cnote h2{margin:0;font:800 20px/1.1 var(--display);text-transform:uppercase;letter-spacing:.03em}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pair .btn{width:100%;padding-left:8px;padding-right:8px;font-size:17px;text-align:center}
+.cnote-h{margin:0;font:800 20px/1.1 var(--display);text-transform:uppercase;letter-spacing:.03em}
 .reacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center}
 .rx{display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:2px 9px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);font:600 14px var(--body);cursor:pointer}
 .rx[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent)}
@@ -789,7 +790,6 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
   function renderMast() {
     $mast.replaceChildren(
-      h('div', { class: 'eyebrow', text: 'Prop sheet' }),
       h('h1', { text: (game && game.title) || 'Super Bowl Pool' }),
       h('p', { class: 'status', text: statusLine() })
     );
@@ -904,7 +904,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var root = h('div', { class: 'stack' });
     var text = (intro && intro.text) || '';
     var img = (intro && intro.img) || '';
-    if (!(introEditing && canEdit)) root.append(countdownEl());
+    var cdEl = introEditing && canEdit ? null : countdownEl();
+    if (cdEl) root.append(cdEl);
     var canEditIntro = canEdit;
     if (introEditing && canEditIntro) {
       var ta = h('textarea', { id: 'intro-text', rows: 16, value: introDraft,
@@ -939,10 +940,9 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (text) root.append(h('div', { class: 'card' }, h('div', { class: 'introtext', text: text })));
     if (!text && !img) root.append(note('No welcome message yet', canEditIntro ? 'Tap Edit welcome to write a welcome message.' : 'The host has not posted a welcome message yet.'));
     if (committee && committee.text) {
-      root.append(h('div', { class: 'card stack cnote' },
-        h('h2', { text: 'Notes from the Prop Bet Committee' }),
-        h('div', { class: 'introtext', text: committee.text }),
-        h('div', { class: 'submit' }, h('a', { class: 'btn link', href: '#fame', text: 'Go to Hall of Fame' }))));
+      root.append(h('div', { class: 'card stack' },
+        h('h2', { class: 'cnote-h', text: 'Notes from the Prop Bet Committee' }),
+        h('div', { class: 'introtext', text: committee.text })));
     }
     root.append(h('div', { class: 'submit' },
       h('a', { class: 'btn link', href: '#entry', text: 'Make your picks' }),
@@ -1835,7 +1835,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('strong', { text: locked ? 'Entries are closed' : 'Entries are open' }),
         h('p', { class: 'status', text: sub }),
         h('p', { class: 'status', text: results.final ? 'Game is final. The leaderboard shows the winner.' : 'Game in progress. Mark it final when the last answer is in.' })),
-      h('div', { class: 'qedit-tools' },
+      h('div', { class: 'qedit-tools pair' },
         h('button', { class: locked ? 'btn ghost' : 'btn', type: 'button', text: locked ? 'Reopen entries' : 'Close entries now',
           onclick: function () { saveGame(locked ? { locked: false, lockAt: null } : { locked: true }); } }),
         h('button', { class: results.final ? 'btn ghost' : 'btn', type: 'button', text: results.final ? 'Reopen game' : 'Mark final', onclick: toggleFinal })));
@@ -2352,8 +2352,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     pendingRender = false;
     chatList = null;
     $mast.replaceChildren(
-      h('div', { class: 'eyebrow', text: 'Prop sheet' }),
-      h('h1', { text: 'Super Bowl Pools' }),
+      h('h1', { text: 'All Pools' }),
       h('p', { class: 'status', text: canEdit ? 'Open a pool to run it, or start a new one.' : 'Open the link the host sent you.' }));
     $tabs.replaceChildren();
     $app.replaceChildren(pickerBody());
