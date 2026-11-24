@@ -130,6 +130,13 @@ input:disabled{opacity:.7}
 .entry-row .hint{display:block}
 .toast{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px));pointer-events:none}
 .toast span{background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.toast span.act{pointer-events:auto;display:flex;gap:14px;align-items:center}
+.toast .toastbtn{background:none;border:0;color:var(--accent-bg);font:800 14px/1 var(--body);text-transform:uppercase;letter-spacing:.06em;cursor:pointer;padding:6px 2px;min-height:32px}
+.invrow{display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)}
+.invrow:first-of-type{border-top:0}
+.invadd{display:grid;gap:8px}
+.invadd textarea{min-height:90px}
+.sugform{display:grid;gap:10px}
 .chatlist{display:grid;gap:8px;align-content:start;min-height:220px;max-height:min(58vh,520px);overflow-y:auto;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .msg{display:grid;gap:2px;min-width:0;max-width:88%;justify-self:start;padding:8px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
 .msg.mine{justify-self:end;background:var(--accent-bg);border-color:var(--accent)}
@@ -375,8 +382,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   var rootDb = null, poolList = [], versionList = [], poolsLoaded = false, hostSubs = false;
   var poolForm = { name: '', source: 'blank' }, versionName = '';
   var fameList = [], fameLoaded = false, fameForm = { year: '', name: '', photo: '' }, adminList = [], isMaster = false;
-  var qimgs = {}, trophy = null, contactMap = {}, contactSubs = false, contactLoadedFor = null;
-  var viewVer = null, bqOpen = new Set(), boardMode = 'player', bqId = null, marksList = [], storyHi = null, curStory = { badges: {} }, fameStoryOpen = new Set();
+  var qimgs = {}, trophy = null, trophyLoaded = false, contactMap = {}, contactSubs = false, contactLoadedFor = null;
+  var inviteList = [], suggList = [], invForm = { name: '', contact: '', paste: '' }, sug = { name: '', contact: '', by: '', done: false }, inviteDone = false, viewVer = null, bqOpen = new Set(), boardMode = 'player', bqId = null, marksList = [], storyHi = null, curStory = { badges: {} }, fameStoryOpen = new Set();
   var fameOpen = new Set(), fameData = {}, fameEntryOpen = new Set(), legacyFame;
 
   function lsGet(k) { try { return localStorage.getItem('sbp:' + k) || ''; } catch (e) { return ''; } }
@@ -407,11 +414,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
 
   var toastTimer;
-  function toast(msg) {
-    $toast.replaceChildren(h('span', { text: msg }));
+  function toast(msg, label, fn) {
+    var btn = label ? h('button', { class: 'toastbtn', type: 'button', text: label, onclick: function () { $toast.hidden = true; clearTimeout(toastTimer); if (fn) fn(); } }) : null;
+    $toast.replaceChildren(h('span', { class: label ? 'act' : '' }, msg, btn));
     $toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { $toast.hidden = true; }, 3200);
+    toastTimer = setTimeout(function () { $toast.hidden = true; }, label ? 7000 : 3200);
   }
 
   var chain = Promise.resolve();
@@ -725,6 +733,18 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!game || !game.lockAt || game.locked) return;
     var ms = game.lockAt - Date.now();
     if (ms > 0 && ms < 2147483000) lockTimer = setTimeout(render, ms + 250);
+    clearTimeout(warnTimer);
+    var wm = game.lockAt - 3600000 - Date.now();
+    if (wm > 0 && wm < 2147483000) warnTimer = setTimeout(render, wm + 250);
+  }
+  var warnTimer;
+  function closingSoon() {
+    if (!game || !game.lockAt || game.locked || isLocked() || results.final || canEdit) return null;
+    if (game.lockAt - Date.now() > 3600000) return null;
+    if (uid && entries.some(function (e) { return e.id === uid; })) return null;
+    var t;
+    try { t = new Date(game.lockAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) { t = ''; }
+    return h('div', { class: 'banner info', role: 'status' }, h('span', { text: 'Entries close at ' + t + '. Lock in your picks before then.' }));
   }
   function qs() { return game && Array.isArray(game.questions) ? game.questions : []; }
   function opts(q) { return Array.isArray(q.options) ? q.options : []; }
@@ -743,15 +763,17 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     });
     return pts;
   }
+  function tbTotal() { return !!(game && game.tiebreak && game.tbMode === 'total'); }
   function ranked() {
     var rA = typeof results.tbA === 'number' ? results.tbA : null;
     var rB = typeof results.tbB === 'number' ? results.tbB : null;
-    var tb = rA !== null && rB !== null;
+    var tot = tbTotal();
+    var tb = tot ? rA !== null : (rA !== null && rB !== null);
     var list = entries.map(function (e) {
       return {
         e: e,
         pts: scoreOf(e),
-        diff: tb && typeof e.tbA === 'number' && typeof e.tbB === 'number' ? Math.abs(e.tbA - rA) + Math.abs(e.tbB - rB) : null
+        diff: tb && typeof e.tbA === 'number' && (tot || typeof e.tbB === 'number') ? (tot ? Math.abs(e.tbA - rA) : Math.abs(e.tbA - rA) + Math.abs(e.tbB - rB)) : null
       };
     });
     list.sort(function (a, b) {
@@ -798,7 +820,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
   function readHash() {
     var k = (location.hash || '').slice(1);
-    view = ['intro', 'entry', 'board', 'chat', 'fame', 'host'].indexOf(k) >= 0 ? k : 'intro';
+    view = ['intro', 'entry', 'board', 'chat', 'fame', 'host', 'suggest'].indexOf(k) >= 0 ? k : 'intro';
     if (view === 'host' && !canEdit) view = 'entry';
   }
 
@@ -850,7 +872,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
   var lazyOn = {}, lazyStart = {};
   function ensureLazy() {
-    var need = { intro: [], entry: ['qimg', 'marks'], board: ['qimg', 'marks', 'hof'], chat: ['reactions'], fame: ['hof', 'trophy'], host: ['qimg', 'marks', 'hof', 'trophy'] }[view] || [];
+    var need = { intro: [], entry: ['qimg', 'marks'], board: ['qimg', 'marks', 'hof'], chat: ['reactions'], fame: ['hof', 'trophy'], suggest: [], host: ['qimg', 'marks', 'hof', 'trophy'] }[view] || [];
     need.forEach(function (n) { if (!lazyOn[n] && lazyStart[n]) { lazyOn[n] = true; lazyStart[n](); } });
   }
   function render() {
@@ -861,7 +883,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     renderMast();
     renderTabs();
     chatList = null;
-    var body = view === 'intro' ? renderIntro() : view === 'fame' ? renderFame() : view === 'board' ? renderBoard() : view === 'chat' ? renderChat() : view === 'host' ? renderHost() : renderEntry();
+    var body = view === 'intro' ? renderIntro() : view === 'fame' ? renderFame() : view === 'board' ? renderBoard() : view === 'chat' ? renderChat() : view === 'host' ? renderHost() : view === 'suggest' ? renderSuggest() : renderEntry();
     $app.replaceChildren(body);
     maybeCelebrate();
   }
@@ -927,18 +949,22 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   function countdownEl() {
     var t = game && game.anthemAt;
-    if (!t || Date.now() > t + 3 * 3600000) return null;
+    if (!t || Date.now() > t + 30 * 60000) return null;
     return h('div', { class: 'card cd', role: 'timer' },
       h('div', { class: 'hint', id: 'cd-label', text: Date.now() < t ? 'Until the National Anthem' : '' }),
       h('div', { class: 'big', id: 'cd-time', text: cdText(t) }),
-      h('div', { class: 'hint', text: Date.now() < t ? 'Get your picks in before it starts.' : 'Good luck everyone.' }));
+      h('div', { class: 'hint', id: 'cd-hint', text: cdHint(t) }));
   }
+  function cdHint(t) { return Date.now() < t ? 'Get your picks in before it starts.' : 'Good luck, and check the Leaderboard for results.'; }
   setInterval(function () {
     var el = document.getElementById('cd-time');
     if (!el || !game || !game.anthemAt) return;
     el.textContent = cdText(game.anthemAt);
     var lb = document.getElementById('cd-label');
     if (lb) lb.textContent = Date.now() < game.anthemAt ? 'Until the National Anthem' : '';
+    var ch = document.getElementById('cd-hint');
+    if (ch) ch.textContent = cdHint(game.anthemAt);
+    if (Date.now() > game.anthemAt + 30 * 60000) { var card = el.closest('.cd'); if (card) card.remove(); }
   }, 1000);
 
   function tutorialCard() {
@@ -948,7 +974,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       var steps = [
         'On the Your Picks tab, fill in your profile. Your nickname shows on the leaderboard. A photo, favorite team and location are optional, and everyone in the pool sees them. Your full name, email and phone are optional too, and only the host sees them.',
         'Answer every question. The bar at the top shows how many you have answered.',
-        game && game.tiebreak ? 'Enter your guess for both final scores. It only matters if players tie on points.' : null,
+        game && game.tiebreak ? (game.tbMode === 'total' ? 'Enter your guess for the tiebreaker number. It only matters if players tie on points, and the closest guess wins.' : 'Enter your guess for both final scores. It only matters if players tie on points.') : null,
         'Tap Lock in my picks. You can change your picks any time until entries close.',
         'Follow the Leaderboard during the game. Once entries close, tap a player or a question to see everyone\u2019s picks, and open Game story for awards and badges.',
         'Use Trash Talk to chat and react to messages.',
@@ -967,6 +993,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var img = (intro && intro.img) || '';
     var cdEl = introEditing && canEdit ? null : countdownEl();
     if (cdEl) root.append(cdEl);
+    var csBan = introEditing && canEdit ? null : closingSoon();
+    if (csBan) root.append(csBan);
     var canEditIntro = canEdit;
     if (introEditing && canEditIntro) {
       var ta = h('textarea', { id: 'intro-text', rows: 16, value: introDraft,
@@ -1049,6 +1077,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       root.append(h('div', { class: 'banner' }, h('span', { text: 'Your entry is in. You can change your picks until entries close.' })));
     }
 
+    var csBan2 = closingSoon();
+    if (csBan2) root.append(csBan2);
     if (!readOnly && game.lockAt && !isLocked()) {
       root.append(h('p', { class: 'hint', text: 'Entries close ' + fmtWhen(game.lockAt) + '.' }));
     }
@@ -1126,7 +1156,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         }))));
     });
 
-    if (game.tiebreak) {
+    if (game.tiebreak && tbTotal()) {
+      root.append(h('div', { class: 'card stack' },
+        h('label', { class: 'lbl', for: 'f-tba' }, game.tiebreak, h('small', { text: 'Only used to break ties. The closest guess, over or under, wins.' }),
+          h('input', { type: 'number', id: 'f-tba', inputMode: 'numeric', min: '0', max: '999', value: draft.tbA || '', disabled: readOnly,
+            oninput: function (ev) { draft.tbA = ev.target.value; draft.touched = true; meta(); } }))));
+    } else if (game.tiebreak) {
       root.append(h('div', { class: 'card stack' },
         h('div', { class: 'lbl' }, game.tiebreak, h('small', { text: 'Only used to break ties. The smallest combined miss on both scores wins.' })),
         h('div', { class: 'scorepair' },
@@ -1159,7 +1194,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       yard.style.setProperty('--p', total ? n / total : 0);
       count.textContent = n + ' of ' + total + ' answered';
       var nameOk = draft.name.trim().length > 0;
-      var tieOk = !game.tiebreak || (okNum(draft.tbA) && okNum(draft.tbB));
+      var tieOk = !game.tiebreak || (okNum(draft.tbA) && (tbTotal() || okNum(draft.tbB)));
       btn.disabled = !(n === total && nameOk && tieOk && !readOnly && !busy);
       var left = total - n;
       hint.textContent = !nameOk ? 'Add a nickname to submit.'
@@ -1223,7 +1258,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     busy = true;
     var name = draft.name.trim().slice(0, 40);
     var tbA = okNum(draft.tbA) ? Number(draft.tbA) : null;
-    var tbB = okNum(draft.tbB) ? Number(draft.tbB) : null;
+    var tbB = !tbTotal() && okNum(draft.tbB) ? Number(draft.tbB) : null;
     var wasGuest = !!guestId;
     try {
       await db.doc('entries/' + id).set({
@@ -1350,7 +1385,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('div', { class: 'ptext' }, h('div', { class: 'pq', text: q.text }), h('div', { class: 'pa', text: label })),
         h('span', { class: 'tag ' + st[0], text: st[1] })));
     });
-    if (game.tiebreak && typeof r.e.tbA === 'number' && typeof r.e.tbB === 'number') {
+    if (game.tiebreak && tbTotal() && typeof r.e.tbA === 'number') {
+      box.append(h('div', { class: 'prow' },
+        h('div', { class: 'ptext' }, h('div', { class: 'pq', text: game.tiebreak }), h('div', { class: 'pa', text: 'Guess: ' + r.e.tbA }))));
+    } else if (game.tiebreak && typeof r.e.tbA === 'number' && typeof r.e.tbB === 'number') {
       box.append(h('div', { class: 'prow' },
         h('div', { class: 'ptext' }, h('div', { class: 'pq', text: game.tiebreak }),
           h('div', { class: 'pa', text: teamA() + ' ' + r.e.tbA + ' \u00b7 ' + teamB() + ' ' + r.e.tbB }))));
@@ -1942,7 +1980,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     }).concat([h('a', { href: location.pathname, text: 'All pools' })])));
     if (!loaded.game) { root.append(loadingNote()); return root; }
     if (game) root.append(lockCard());
-    if (game && hostTab === 'setup') root.append(noteCard());
+    if (game && hostTab === 'setup') { root.append(noteCard()); root.append(inviteCard()); }
     root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'entries' ? hostEntries() : hostScore());
     return root;
   }
@@ -1961,6 +1999,119 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('button', { class: locked ? 'btn ghost' : 'btn', type: 'button', text: locked ? 'Reopen entries' : 'Close entries now',
           onclick: function () { saveGame(locked ? { locked: false, lockAt: null } : { locked: true }); } }),
         h('button', { class: results.final ? 'btn ghost' : 'btn', type: 'button', text: results.final ? 'Reopen game' : 'Mark final', onclick: toggleFinal })));
+  }
+  function newToken() {
+    var a = new Uint8Array(14), al = 'abcdefghijkmnpqrstuvwxyz23456789';
+    crypto.getRandomValues(a);
+    return Array.prototype.map.call(a, function (b) { return al[b % 32]; }).join('');
+  }
+  function splitContact(c) {
+    c = String(c || '').trim();
+    if (!c) return {};
+    return c.indexOf('@') >= 0 ? { email: c.slice(0, 80) } : { phone: c.slice(0, 30) };
+  }
+  function inviteUrl(tok) { return location.origin + location.pathname + '?p=' + encodeURIComponent(pid) + (tok ? '&i=' + tok : ''); }
+  function inviteText(tok) {
+    return 'Join our ' + ((game && game.title) || 'Super Bowl pool') + '! Make your picks here: ' + inviteUrl(tok) +
+      '\n\nKnow someone who should play? Suggest them here: ' + inviteUrl('') + '#suggest';
+  }
+  function addInvites(rows) {
+    var good = rows.filter(function (r) { var c = String(r.contact || '').trim(); return c.indexOf('@') > 0 || c.replace(/\D/g, '').length >= 7; });
+    if (!good.length) { toast('Add an email address or phone number.'); return Promise.resolve(false); }
+    return enqueue(async function () {
+      for (var i = 0; i < good.length; i++) {
+        var r = good[i];
+        var d = Object.assign({ name: (r.name || r.contact).trim().slice(0, 60), at: Date.now() }, splitContact(r.contact));
+        await db.doc('invites/' + newToken()).set(d);
+      }
+    }).then(function (ok) { if (ok) toast(good.length === 1 ? 'Added' : good.length + ' added'); return ok; });
+  }
+  function inviteCard() {
+    var box = h('div', { class: 'card stack' });
+    box.append(h('div', { class: 'lbl' }, 'Invite people', h('small', { text: 'Add a name with an email or phone number. Send opens your Messages or Mail with the pool link ready. Each person gets their own link, so their details fill in when they open it.' })));
+    var sent = inviteList.length, opened = inviteList.filter(function (v) { return v.uid; }).length;
+    var entered = inviteList.filter(function (v) { return v.uid && entries.some(function (e) { return e.id === v.uid; }); }).length;
+    if (sent) box.append(h('p', { class: 'status', text: sent + ' invited · ' + opened + ' opened · ' + entered + ' entered' }));
+    box.append(h('div', { class: 'invadd' },
+      h('label', { class: 'lbl', for: 'inv-name' }, 'Name', h('input', { type: 'text', id: 'inv-name', maxLength: 60, value: invForm.name, autocomplete: 'off', oninput: function (ev) { invForm.name = ev.target.value; } })),
+      h('label', { class: 'lbl', for: 'inv-contact' }, 'Email or phone', h('input', { type: 'text', id: 'inv-contact', maxLength: 80, value: invForm.contact, autocomplete: 'off', inputMode: 'email', oninput: function (ev) { invForm.contact = ev.target.value; } })),
+      h('div', { class: 'qedit-tools' }, h('button', { class: 'btn small', type: 'button', id: 'inv-add', text: 'Add person', onclick: function () {
+        addInvites([{ name: invForm.name, contact: invForm.contact }]).then(function (ok) { if (ok) { invForm.name = ''; invForm.contact = ''; render(); } });
+      } })),
+      h('label', { class: 'lbl', for: 'inv-paste' }, 'Or paste a list', h('small', { text: 'One person per line: name, then email or phone.' }),
+        h('textarea', { id: 'inv-paste', rows: 4, value: invForm.paste, oninput: function (ev) { invForm.paste = ev.target.value; } })),
+      h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'inv-addlist', text: 'Add list', onclick: function () {
+        var rows = invForm.paste.split(/\n+/).map(function (ln) {
+          var parts = ln.split(/[,\t;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+          if (!parts.length) return null;
+          if (parts.length === 1) return { name: '', contact: parts[0] };
+          return { name: parts[0], contact: parts[parts.length - 1] };
+        }).filter(Boolean);
+        if (!rows.length) { toast('Paste at least one line.'); return; }
+        addInvites(rows).then(function (ok) { if (ok) { invForm.paste = ''; render(); } });
+      } }))));
+    inviteList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (v) {
+      var st = v.uid && entries.some(function (e) { return e.id === v.uid; }) ? ['good', 'Entered'] : v.uid ? ['wait', 'Opened'] : v.sentAt ? ['wait', 'Sent'] : ['wait', 'Not sent'];
+      var contact = v.email || v.phone || '';
+      var href = v.email
+        ? 'mailto:' + v.email + '?subject=' + encodeURIComponent('Join our ' + ((game && game.title) || 'Super Bowl pool')) + '&body=' + encodeURIComponent(inviteText(v.id))
+        : 'sms:' + String(v.phone || '').replace(/[^0-9+]/g, '') + '&body=' + encodeURIComponent(inviteText(v.id));
+      box.append(h('div', { class: 'invrow', 'data-inv': v.id },
+        h('div', { class: 'prow' },
+          h('div', { class: 'ptext' }, h('div', { class: 'pq', text: v.name || contact }), h('div', { class: 'pa', text: contact })),
+          h('span', { class: 'tag ' + st[0], text: st[1] })),
+        h('div', { class: 'qedit-tools' },
+          h('a', { class: 'btn small link', href: href, text: v.sentAt ? 'Send again' : 'Send',
+            onclick: function () { try { Promise.resolve(db.doc('invites/' + v.id).update({ sentAt: Date.now() })).catch(function () {}); } catch (e) {} } }),
+          h('button', { class: 'btn ghost small', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + (v.name || contact),
+            onclick: function () { if (window.confirm('Remove ' + (v.name || contact) + ' from the list?')) enqueue(function () { return db.doc('invites/' + v.id).delete(); }); } }))));
+    });
+    if (suggList.length) {
+      box.append(h('div', { class: 'lbl' }, 'Suggested players', h('small', { text: 'Guests suggested these people. Add moves them to your invite list. Nothing is sent to them until you tap Send.' })));
+      suggList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (x) {
+        box.append(h('div', { class: 'invrow', 'data-sug': x.id },
+          h('div', { class: 'ptext' }, h('div', { class: 'pq', text: x.name }), h('div', { class: 'pa', text: x.contact + (x.by ? ' · suggested by ' + x.by : '') })),
+          h('div', { class: 'qedit-tools' },
+            h('button', { class: 'btn small', type: 'button', text: 'Add', onclick: function () {
+              addInvites([{ name: x.name, contact: x.contact }]).then(function (ok) { if (ok) enqueue(function () { return db.doc('suggestions/' + x.id).delete(); }); });
+            } }),
+            h('button', { class: 'btn ghost small', type: 'button', text: 'Dismiss', onclick: function () { enqueue(function () { return db.doc('suggestions/' + x.id).delete(); }); } }))));
+      });
+      box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', text: 'Clear all suggestions', onclick: function () {
+        if (!window.confirm('Remove all suggestions?')) return;
+        enqueue(async function () { for (var i = 0; i < suggList.length; i++) await db.doc('suggestions/' + suggList[i].id).delete(); });
+      } })));
+    }
+    box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'backup-btn', text: 'Download backup', onclick: exportBackup }),
+      h('small', { class: 'hint', text: 'Saves all entries, answers and the Hall of Fame to a file.' })));
+    return box;
+  }
+  function renderSuggest() {
+    if (!db) return noAccess();
+    var root = h('div', { class: 'stack' });
+    if (sug.done) {
+      root.append(h('div', { class: 'card stack' },
+        h('h2', { class: 'cnote-h', text: 'Thanks!' }),
+        h('p', { class: 'status', text: 'The host will see your suggestion and decide whether to send them the link.' }),
+        h('div', { class: 'submit' },
+          h('button', { class: 'btn small', type: 'button', text: 'Suggest another', onclick: function () { sug.done = false; sug.name = ''; sug.contact = ''; render(); } }),
+          h('a', { class: 'btn ghost small link', href: '#intro', text: 'Back to Welcome' }))));
+      return root;
+    }
+    root.append(h('div', { class: 'card sugform' },
+      h('h2', { class: 'cnote-h', text: 'Suggest a player' }),
+      h('p', { class: 'status', text: 'Know someone who should play? Add their name and email or phone number. The host decides whether to invite them.' }),
+      h('label', { class: 'lbl', for: 'sg-name' }, 'Their name', h('input', { type: 'text', id: 'sg-name', maxLength: 60, value: sug.name, autocomplete: 'off', oninput: function (ev) { sug.name = ev.target.value; } })),
+      h('label', { class: 'lbl', for: 'sg-contact' }, 'Their email or phone', h('input', { type: 'text', id: 'sg-contact', maxLength: 80, value: sug.contact, autocomplete: 'off', oninput: function (ev) { sug.contact = ev.target.value; } })),
+      h('label', { class: 'lbl', for: 'sg-by' }, 'Your name (optional)', h('input', { type: 'text', id: 'sg-by', maxLength: 60, value: sug.by, autocomplete: 'off', oninput: function (ev) { sug.by = ev.target.value; } })),
+      h('div', { class: 'submit' }, h('button', { class: 'btn small', type: 'button', id: 'sg-send', text: 'Send suggestion', onclick: async function () {
+        var nm = sug.name.trim(), ct = sug.contact.trim();
+        if (!nm || !ct) { toast('Add their name and an email or phone number.'); return; }
+        if (!uid) { toast('Still connecting. Try again in a moment.'); return; }
+        var ok = await enqueue(function () { return db.collection('suggestions').add({ name: nm.slice(0, 60), contact: ct.slice(0, 80), by: sug.by.trim().slice(0, 60), at: Date.now(), uid: uid }); });
+        if (ok) { sug.done = true; render(); }
+      } }))));
+    return root;
   }
   function noteSeenKey() { return 'noteSeen:' + pid; }
   function toggleFinal() {
@@ -2049,13 +2200,21 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     });
   }
 
+  var scoreOpenOnly = false;
   function hostScore() {
     var box = h('div', { class: 'stack' });
     var list = qs();
     if (!list.length) { box.append(note('No questions yet', 'Add your questions in Setup first.')); return box; }
-    box.append(h('p', { class: 'status', text: 'Tap the correct answer as each one is decided. Tap it again to clear it.' }));
+    var open = list.filter(function (q) { return answerOf(q) === null; }).length;
+    box.append(h('p', { class: 'status', text: 'Tap the correct answer as each one is decided. Tap it again to clear it. ' + (list.length - open) + ' of ' + list.length + ' marked.' }));
+    box.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Show questions' },
+      [[false, 'All questions'], [true, 'Unmarked (' + open + ')']].map(function (t) {
+        return h('button', { type: 'button', text: t[1], 'aria-pressed': String(scoreOpenOnly === t[0]), onclick: function () { scoreOpenOnly = t[0]; render(); } });
+      })));
+    if (scoreOpenOnly && !open) box.append(note('All marked', 'Every question has an answer.'));
     list.forEach(function (q, qi) {
       var a = answerOf(q);
+      if (scoreOpenOnly && a !== null) return;
       box.append(h('div', { class: 'card q' },
         h('div', { class: 'qhead' },
           h('span', { class: 'qn', text: 'Q' + (qi + 1) }),
@@ -2063,10 +2222,20 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         qBlock(q, null),
         h('div', { class: 'opts' }, opts(q).map(function (o, oi) {
           return h('button', { class: 'chip', type: 'button', text: o, 'aria-pressed': String(a === oi),
-            onclick: function () { setAnswer(q.id, a === oi ? null : oi); } });
+            onclick: function () {
+              var nx = a === oi ? null : oi, pv = a;
+              setAnswer(q.id, nx);
+              toast((nx === null ? 'Cleared Q' : 'Marked Q') + (qi + 1), 'Undo', function () { setAnswer(q.id, pv); });
+            } });
         }))));
     });
-    if (game.tiebreak) {
+    if (game.tiebreak && tbTotal()) {
+      box.append(h('div', { class: 'card stack' },
+        h('label', { class: 'lbl', for: 'f-acta' }, 'Actual total score', h('small', { text: 'Enter the real number once the game ends. The closest guess wins ties.' }),
+          h('input', { type: 'number', id: 'f-acta', inputMode: 'numeric', min: '0', max: '999',
+            value: typeof results.tbA === 'number' ? String(results.tbA) : '',
+            onchange: function (ev) { saveResults({ tbA: ev.target.value === '' ? null : Number(ev.target.value) }); } }))));
+    } else if (game.tiebreak) {
       box.append(h('div', { class: 'card stack' },
         h('div', { class: 'lbl' }, 'Actual final score', h('small', { text: 'Enter both scores once the game ends.' })),
         h('div', { class: 'scorepair' },
@@ -2086,6 +2255,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     return {
       title: (game && game.title) || 'Super Bowl Pool',
       tiebreak: (game && game.tiebreak) || '',
+      tbMode: (game && game.tbMode) === 'total' ? 'total' : 'both',
       teamA: (game && game.teamA) || 'Team A',
       teamB: (game && game.teamB) || 'Team B',
       qs: qs().map(function (q) {
@@ -2130,10 +2300,16 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('input', { type: 'text', id: 'e-title', maxLength: 60, value: edit.title,
           oninput: function (ev) { edit.title = ev.target.value; edit.dirty = true; } })),
       h('label', { class: 'lbl', for: 'e-tie' }, 'Tiebreaker question',
-        h('small', { text: 'Optional. Fans guess both final scores. Clear it to turn the tiebreaker off.' }),
+        h('small', { text: 'Optional. Clear it to turn the tiebreaker off.' }),
         h('input', { type: 'text', id: 'e-tie', maxLength: 80, value: edit.tiebreak,
-          placeholder: 'Tiebreaker: predict the final score',
+          placeholder: edit.tbMode === 'total' ? 'Tiebreaker: total combined score of both teams' : 'Tiebreaker: predict the final score',
           oninput: function (ev) { edit.tiebreak = ev.target.value; edit.dirty = true; } })),
+      h('div', { class: 'stack' },
+        h('div', { class: 'lbl' }, 'Tiebreaker type', h('small', { text: 'Pick this before people enter. Changing it later changes what their guesses mean.' })),
+        h('div', { class: 'seg', role: 'group', 'aria-label': 'Tiebreaker type' }, [['both', 'Both final scores'], ['total', 'One number, closest wins']].map(function (t) {
+          return h('button', { type: 'button', text: t[1], 'aria-pressed': String(edit.tbMode === t[0]),
+            onclick: function () { edit.tbMode = t[0]; edit.dirty = true; render(); } });
+        }))),
       h('div', { class: 'scorepair' },
         h('label', { class: 'lbl', for: 'e-ta' }, 'Team A name',
           h('input', { type: 'text', id: 'e-ta', maxLength: 24, value: edit.teamA,
@@ -2201,6 +2377,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var ok = await saveGame({
       title: edit.title.trim() || 'Super Bowl Pool',
       tiebreak: edit.tiebreak.trim(),
+      tbMode: edit.tbMode === 'total' ? 'total' : 'both',
       teamA: edit.teamA.trim() || 'Team A',
       teamB: edit.teamB.trim() || 'Team B',
       questions: out,
@@ -2284,14 +2461,31 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       ['xl/worksheets/sheet1.xml', X + '<worksheet xmlns="' + NS + '"><sheetViews><sheetView workbookViewId="0"><pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>' + cols + '<sheetData>' + rowsXml + '</sheetData></worksheet>']
     ]);
   }
+  function exportBackup() {
+    var data = {
+      app: 'prop-bets', pool: pid, exportedAt: new Date().toISOString(),
+      game: game, results: results,
+      entries: entries.map(function (e) { return Object.assign({}, e); }),
+      marks: marksList, hallOfFame: fameList,
+      welcome: intro ? { text: intro.text || '' } : null,
+      committeeNote: committee ? committee.text || '' : ''
+    };
+    var blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var nm = String((game && game.title) || pid || 'pool').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pool';
+    a.href = url; a.download = nm + '-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('Backup downloaded');
+  }
   function exportXlsx() {
     var rows = ranked(), list = qs();
     var head = [{ v: 'Rank', s: 1 }, { v: 'Player', s: 1 }, { v: 'Points', s: 1 }]
       .concat(list.map(function (q, i) { return { v: 'Q' + (i + 1) + ': ' + q.text, s: 1 }; }))
-      .concat([{ v: teamA() + ' score guess', s: 1 }, { v: teamB() + ' score guess', s: 1 }]);
+      .concat(tbTotal() ? [{ v: 'Tiebreaker guess', s: 1 }] : [{ v: teamA() + ' score guess', s: 1 }, { v: teamB() + ' score guess', s: 1 }]);
     var ans = [{ v: '', s: 2 }, { v: 'ANSWERS', s: 2 }, { v: '', s: 2 }]
       .concat(list.map(function (q) { var a = answerOf(q); return { v: a === null ? '' : (opts(q)[a] || ''), s: 2 }; }))
-      .concat([{ v: typeof results.tbA === 'number' ? results.tbA : '', s: 2 }, { v: typeof results.tbB === 'number' ? results.tbB : '', s: 2 }]);
+      .concat(tbTotal() ? [{ v: typeof results.tbA === 'number' ? results.tbA : '', s: 2 }] : [{ v: typeof results.tbA === 'number' ? results.tbA : '', s: 2 }, { v: typeof results.tbB === 'number' ? results.tbB : '', s: 2 }]);
     var body = rows.map(function (r) {
       var pk = r.e.picks || {};
       return [{ v: r.rank }, { v: r.e.name || 'Unnamed' }, { v: r.pts }]
@@ -2299,9 +2493,9 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           var x = pk[q.id], a = answerOf(q);
           return { v: Number.isInteger(x) ? (opts(q)[x] || '') : '', s: a !== null && x === a ? 3 : 0 };
         }))
-        .concat([{ v: typeof r.e.tbA === 'number' ? r.e.tbA : '' }, { v: typeof r.e.tbB === 'number' ? r.e.tbB : '' }]);
+        .concat(tbTotal() ? [{ v: typeof r.e.tbA === 'number' ? r.e.tbA : '' }] : [{ v: typeof r.e.tbA === 'number' ? r.e.tbA : '' }, { v: typeof r.e.tbB === 'number' ? r.e.tbB : '' }]);
     });
-    var widths = [7, 20, 9].concat(list.map(function () { return 26; })).concat([16, 16]);
+    var widths = [7, 20, 9].concat(list.map(function () { return 26; })).concat(tbTotal() ? [16] : [16, 16]);
     var blob = buildXlsx([head, ans].concat(body), widths);
     var name = String((game && game.title) || 'picks').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'picks';
     var url = URL.createObjectURL(blob);
@@ -2611,6 +2805,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       title: (game && game.title) || 'Super Bowl Pool',
       teamA: teamA(), teamB: teamB(),
       tiebreak: (game && game.tiebreak) || '',
+      tbMode: tbTotal() ? 'total' : 'both',
       tbA: typeof results.tbA === 'number' ? results.tbA : null,
       tbB: typeof results.tbB === 'number' ? results.tbB : null,
       questions: qs().map(function (q) {
@@ -2717,7 +2912,10 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('div', { class: 'ptext' }, h('div', { class: 'pq', text: q.text }), h('div', { class: 'pa', text: label })),
         h('span', { class: 'tag ' + st[0], text: st[1] })));
     });
-    if (snap.tiebreak && typeof r.tbA === 'number' && typeof r.tbB === 'number') {
+    if (snap.tiebreak && snap.tbMode === 'total' && typeof r.tbA === 'number') {
+      box.append(h('div', { class: 'prow' },
+        h('div', { class: 'ptext' }, h('div', { class: 'pq', text: snap.tiebreak }), h('div', { class: 'pa', text: 'Guess: ' + r.tbA }))));
+    } else if (snap.tiebreak && typeof r.tbA === 'number' && typeof r.tbB === 'number') {
       box.append(h('div', { class: 'prow' },
         h('div', { class: 'ptext' }, h('div', { class: 'pq', text: snap.tiebreak }),
           h('div', { class: 'pa', text: (snap.teamA || 'Team A') + ' ' + r.tbA + ' · ' + (snap.teamB || 'Team B') + ' ' + r.tbB }))));
@@ -2729,7 +2927,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var box = h('div', { class: 'fame-res' });
     if (snap === undefined || snap === null) { box.append(note('Loading results', 'One moment.')); return box; }
     if (snap === false) { box.append(note('No saved results', 'Results were not saved for this winner.')); return box; }
-    var score = typeof snap.tbA === 'number' && typeof snap.tbB === 'number'
+    var score = snap.tbMode === 'total' && typeof snap.tbA === 'number' ? ' · Final total: ' + snap.tbA : typeof snap.tbA === 'number' && typeof snap.tbB === 'number'
       ? ' · Final score: ' + (snap.teamA || 'Team A') + ' ' + snap.tbA + ', ' + (snap.teamB || 'Team B') + ' ' + snap.tbB : '';
     box.append(h('p', { class: 'status', text: (snap.title || 'Final standings') + score }));
     var sst = snapStory(snap);
@@ -2755,7 +2953,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     loadLegacy();
     var root = h('div', { class: 'stack' });
     var hero = h('div', { class: 'fame-hero' },
-      h('img', { src: trophy || TROPHY_SRC, alt: 'The MicMunch trophy for football prop bet excellence' }));
+      trophyLoaded ? h('img', { src: trophy || TROPHY_SRC, alt: 'The MicMunch trophy for football prop bet excellence' }) : h('div', { style: 'min-height:220px', 'aria-hidden': 'true' }));
     if (canEdit) {
       hero.append(h('div', { class: 'qedit-tools' },
         fileBtn('Change trophy photo', setTrophy),
@@ -2879,7 +3077,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   async function hostSignOut() {
     try { await rootDb.doc('hostSessions/' + auth.currentUser.uid).delete(); } catch (e) { toast("Couldn't sign out. Check your connection and try again."); return; }
-    hostSubs = false; contactSubs = false; contactMap = {}; hostNote = null; noteEdit = null; legacyFame = undefined;
+    hostSubs = false; contactSubs = false; contactMap = {}; inviteList = []; suggList = []; hostNote = null; noteEdit = null; legacyFame = undefined;
     poolList = []; versionList = []; poolsLoaded = false;
     await applyUser(auth.currentUser);
   }
@@ -2894,6 +3092,35 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       contactMap = {};
       s.docs.forEach(function (d) { contactMap[d.id] = d.data(); });
       renderSoon();
+    }, function () {});
+    db.collection('invites').onSnapshot(function (s) {
+      inviteList = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      renderSoon();
+    }, function () {});
+    db.collection('suggestions').onSnapshot(function (s) {
+      suggList = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      renderSoon();
+    }, function () {});
+  }
+  function loadInvite() {
+    if (inviteDone || !uid || !db || !pid) return;
+    var tok = new URLSearchParams(location.search).get('i') || lsGet('inv:' + pid);
+    if (!tok || !/^[a-z0-9]{8,40}$/.test(tok)) return;
+    inviteDone = true;
+    db.doc('invites/' + tok).get().then(function (s) {
+      if (!s.exists) return;
+      var v = s.data() || {};
+      if (v.uid && v.uid !== uid) return;
+      lsSet('inv:' + pid, tok);
+      if (!v.uid) { try { Promise.resolve(db.doc('invites/' + tok).update({ uid: uid, openedAt: Date.now() })).catch(function () {}); } catch (e) {} }
+      if (!draft.contactTouched && !draft.profTouched && !entries.some(function (e) { return e.id === uid; })) {
+        if (!draft.fullName && !draft.email && !draft.phone) {
+          draft.email = v.email || ''; draft.phone = v.phone || '';
+          if (v.name && v.name !== v.email && v.name !== v.phone) draft.fullName = v.name;
+        }
+        if (!draft.name && v.name && v.name.indexOf('@') < 0 && !/^[0-9+() -]+$/.test(v.name)) draft.name = v.name.split(' ')[0].slice(0, 40);
+        renderSoon();
+      }
     }, function () {});
   }
   function loadMyContact() {
@@ -2918,6 +3145,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     canWrite = true;
     if (host) { startHostSubs(); startPoolHostSubs(); }
     loadMyContact();
+    loadInvite();
     readHash();
     syncDraft();
     render();
@@ -2998,10 +3226,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     db.doc('config/trophy').onSnapshot(function (s) {
       var v = s.exists ? s.data() : null;
       trophy = v && v.img ? v.img : null;
+      trophyLoaded = true;
       renderSoon();
-    }, function () {});
+    }, function () { trophyLoaded = true; renderSoon(); });
     };
     ensureLazy();
+    setTimeout(function () { if (!lazyOn.trophy) { lazyOn.trophy = true; lazyStart.trophy(); } }, 2500);
     db.doc('config/note').onSnapshot(function (s) {
       committee = s.exists ? s.data() : null;
       renderSoon();
