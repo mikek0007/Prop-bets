@@ -137,6 +137,7 @@ input:disabled{opacity:.7}
 .invadd{display:grid;gap:8px}
 .invadd textarea{min-height:90px}
 .sugform{display:grid;gap:10px}
+.invprev{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border:1px dashed var(--line);border-radius:8px;font-size:14px;color:var(--ink-2)}
 .chatlist{display:grid;gap:8px;align-content:start;min-height:220px;max-height:min(58vh,520px);overflow-y:auto;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .msg{display:grid;gap:2px;min-width:0;max-width:88%;justify-self:start;padding:8px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
 .msg.mine{justify-self:end;background:var(--accent-bg);border-color:var(--accent)}
@@ -1050,7 +1051,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var list = qs();
     if (!game || !list.length) {
       return note('No questions yet', canEdit
-        ? 'Open the Host tab, add your questions, and save.'
+        ? 'Open the Host tab, then Build pool, add your questions, and save.'
         : "The host hasn't posted the questions yet. Check back soon.");
     }
 
@@ -1973,7 +1974,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!db) return noAccess();
     if (!canEdit) return note('Host only', 'Only the person running the pool can open this tab.');
     var root = h('div', { class: 'stack' });
-    var tabs = [['score', 'Score'], ['setup', 'Setup'], ['entries', 'Entries']];
+    var tabs = [['score', 'Score'], ['setup', 'Setup'], ['build', 'Build pool'], ['entries', 'Entries']];
     root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Host tools' }, tabs.map(function (t) {
       return h('button', { type: 'button', text: t[1], 'aria-pressed': String(hostTab === t[0]),
         onclick: function () { hostTab = t[0]; render(); } });
@@ -1981,7 +1982,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!loaded.game) { root.append(loadingNote()); return root; }
     if (game) root.append(lockCard());
     if (game && hostTab === 'setup') { root.append(noteCard()); root.append(inviteCard()); }
-    root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'entries' ? hostEntries() : hostScore());
+    root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'build' ? hostBuild() : hostTab === 'entries' ? hostEntries() : hostScore());
     return root;
   }
 
@@ -2011,9 +2012,29 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     return c.indexOf('@') >= 0 ? { email: c.slice(0, 80) } : { phone: c.slice(0, 30) };
   }
   function inviteUrl(tok) { return location.origin + location.pathname + '?p=' + encodeURIComponent(pid) + (tok ? '&i=' + tok : ''); }
+  function inviteIntro() { return (game && game.inviteMsg) || ('Join our ' + ((game && game.title) || 'Super Bowl pool') + '! Make your picks at the link below.'); }
   function inviteText(tok) {
-    return 'Join our ' + ((game && game.title) || 'Super Bowl pool') + '! Make your picks here: ' + inviteUrl(tok) +
-      '\n\nKnow someone who should play? Suggest them here: ' + inviteUrl('') + '#suggest';
+    return inviteIntro() + '\n\n' + inviteUrl(tok) +
+      (game && game.inviteSuggest === false ? '' : '\n\nKnow someone who should play? Suggest them here: ' + inviteUrl('') + '#suggest');
+  }
+  var sentNow = {};
+  function unsentInvites() { return inviteList.filter(function (v) { return !v.sentAt && !v.uid && !sentNow[v.id]; }).sort(function (a, b) { return (a.at || 0) - (b.at || 0); }); }
+  function inviteHref(v) {
+    return v.email
+      ? 'mailto:' + v.email + '?subject=' + encodeURIComponent('Join our ' + ((game && game.title) || 'Super Bowl pool')) + '&body=' + encodeURIComponent(inviteText(v.id))
+      : 'sms:' + String(v.phone || '').replace(/[^0-9+]/g, '') + '&body=' + encodeURIComponent(inviteText(v.id));
+  }
+  function markSent(v) {
+    sentNow[v.id] = true;
+    try { Promise.resolve(db.doc('invites/' + v.id).update({ sentAt: Date.now() })).catch(function () {}); } catch (e) {}
+  }
+  function sendNext() {
+    var list = unsentInvites();
+    if (!list.length) { toast('Everyone has been sent their link.'); render(); return; }
+    var v = list[0];
+    markSent(v);
+    render();
+    location.href = inviteHref(v);
   }
   function addInvites(rows) {
     var good = rows.filter(function (r) { var c = String(r.contact || '').trim(); return c.indexOf('@') > 0 || c.replace(/\D/g, '').length >= 7; });
@@ -2032,6 +2053,18 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     var sent = inviteList.length, opened = inviteList.filter(function (v) { return v.uid; }).length;
     var entered = inviteList.filter(function (v) { return v.uid && entries.some(function (e) { return e.id === v.uid; }); }).length;
     if (sent) box.append(h('p', { class: 'status', text: sent + ' invited · ' + opened + ' opened · ' + entered + ' entered' }));
+    var msgBox = h('textarea', { id: 'inv-msg', rows: 3, maxLength: 500, value: inviteIntro(),
+      onchange: function (ev) {
+        var v = ev.target.value.trim(), dflt = 'Join our ' + ((game && game.title) || 'Super Bowl pool') + '! Make your picks at the link below.';
+        saveGame({ inviteMsg: v && v !== dflt ? v : null });
+      } });
+    box.append(h('label', { class: 'lbl', for: 'inv-msg' }, 'Invite message',
+      h('small', { text: 'This goes in every invite. Each person\u2019s own link is added under it automatically.' }), msgBox));
+    box.append(h('label', { class: 'lbl' }, h('span', {},
+      h('input', { type: 'checkbox', id: 'inv-sugg', checked: !(game && game.inviteSuggest === false),
+        onchange: function (ev) { saveGame({ inviteSuggest: ev.target.checked ? null : false }); render(); } }), ' Add the "suggest a player" line')));
+    box.append(h('div', { class: 'hint', 'aria-label': 'Preview of the invite' }, 'Preview:'));
+    box.append(h('div', { class: 'invprev', id: 'inv-prev', text: inviteText('yourpersonallink') }));
     box.append(h('div', { class: 'invadd' },
       h('label', { class: 'lbl', for: 'inv-name' }, 'Name', h('input', { type: 'text', id: 'inv-name', maxLength: 60, value: invForm.name, autocomplete: 'off', oninput: function (ev) { invForm.name = ev.target.value; } })),
       h('label', { class: 'lbl', for: 'inv-contact' }, 'Email or phone', h('input', { type: 'text', id: 'inv-contact', maxLength: 80, value: invForm.contact, autocomplete: 'off', inputMode: 'email', oninput: function (ev) { invForm.contact = ev.target.value; } })),
@@ -2051,21 +2084,26 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         addInvites(rows).then(function (ok) { if (ok) { invForm.paste = ''; render(); } });
       } }))));
     inviteList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (v) {
-      var st = v.uid && entries.some(function (e) { return e.id === v.uid; }) ? ['good', 'Entered'] : v.uid ? ['wait', 'Opened'] : v.sentAt ? ['wait', 'Sent'] : ['wait', 'Not sent'];
+      var st = v.uid && entries.some(function (e) { return e.id === v.uid; }) ? ['good', 'Entered'] : v.uid ? ['wait', 'Opened'] : (v.sentAt || sentNow[v.id]) ? ['wait', 'Sent'] : ['wait', 'Not sent'];
       var contact = v.email || v.phone || '';
-      var href = v.email
-        ? 'mailto:' + v.email + '?subject=' + encodeURIComponent('Join our ' + ((game && game.title) || 'Super Bowl pool')) + '&body=' + encodeURIComponent(inviteText(v.id))
-        : 'sms:' + String(v.phone || '').replace(/[^0-9+]/g, '') + '&body=' + encodeURIComponent(inviteText(v.id));
+      var href = inviteHref(v);
       box.append(h('div', { class: 'invrow', 'data-inv': v.id },
         h('div', { class: 'prow' },
           h('div', { class: 'ptext' }, h('div', { class: 'pq', text: v.name || contact }), h('div', { class: 'pa', text: contact })),
           h('span', { class: 'tag ' + st[0], text: st[1] })),
         h('div', { class: 'qedit-tools' },
-          h('a', { class: 'btn small link', href: href, text: v.sentAt ? 'Send again' : 'Send',
-            onclick: function () { try { Promise.resolve(db.doc('invites/' + v.id).update({ sentAt: Date.now() })).catch(function () {}); } catch (e) {} } }),
+          h('a', { class: 'btn small link', href: href, text: (v.sentAt || sentNow[v.id]) ? 'Send again' : 'Send',
+            onclick: function () { markSent(v); } }),
           h('button', { class: 'btn ghost small', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + (v.name || contact),
             onclick: function () { if (window.confirm('Remove ' + (v.name || contact) + ' from the list?')) enqueue(function () { return db.doc('invites/' + v.id).delete(); }); } }))));
     });
+    var left = unsentInvites().length;
+    if (inviteList.length) {
+      box.append(h('div', { class: 'qedit-tools' },
+        h('button', { class: left ? 'btn small' : 'btn ghost small', type: 'button', id: 'send-all', disabled: !left,
+          text: left ? (Object.keys(sentNow).length ? 'Send next (' + left + ' left)' : 'Send all (' + left + ' left)') : 'Everyone has been sent', onclick: sendNext }),
+        h('small', { class: 'hint', text: left ? 'Opens Messages or Mail for the next person who has not been sent a link. Come back here and tap again for the next one.' : 'Nobody is sent a second time. Use Send again on a row to resend.' })));
+    }
     if (suggList.length) {
       box.append(h('div', { class: 'lbl' }, 'Suggested players', h('small', { text: 'Guests suggested these people. Add moves them to your invite list. Nothing is sent to them until you tap Send.' })));
       suggList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (x) {
@@ -2204,7 +2242,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   function hostScore() {
     var box = h('div', { class: 'stack' });
     var list = qs();
-    if (!list.length) { box.append(note('No questions yet', 'Add your questions in Setup first.')); return box; }
+    if (!list.length) { box.append(note('No questions yet', 'Add your questions in Build pool first.')); return box; }
     var open = list.filter(function (q) { return answerOf(q) === null; }).length;
     box.append(h('p', { class: 'status', text: 'Tap the correct answer as each one is decided. Tap it again to clear it. ' + (list.length - open) + ' of ' + list.length + ' marked.' }));
     box.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Show questions' },
@@ -2266,16 +2304,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
 
   function hostSetup() {
-    if (!edit) edit = initEdit();
     var box = h('div', { class: 'stack' });
-    var locked = !!(game && game.locked);
-
-    if (game && game.sample) {
-      box.append(h('div', { class: 'banner info' }, h('span', { text: 'These are example questions. Replace them with your own, then save.' })));
-    }
-    if (entries.length) {
-      box.append(h('div', { class: 'banner info' }, h('span', { text: 'People have already entered. Changing answer choices can change what their picks mean.' })));
-    }
 
     box.append(h('div', { class: 'card stack' },
       h('label', { class: 'lbl', for: 'e-lock' }, 'Close entries automatically at',
@@ -2294,6 +2323,21 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
 
     box.append(barCard());
     box.append(themeCard());
+
+    return box;
+  }
+
+  function hostBuild() {
+    if (!edit) edit = initEdit();
+    var box = h('div', { class: 'stack' });
+    var locked = !!(game && game.locked);
+
+    if (game && game.sample) {
+      box.append(h('div', { class: 'banner info' }, h('span', { text: 'These are example questions. Replace them with your own, then save.' })));
+    }
+    if (entries.length) {
+      box.append(h('div', { class: 'banner info' }, h('span', { text: 'People have already entered. Changing answer choices can change what their picks mean.' })));
+    }
 
     box.append(h('div', { class: 'card stack' },
       h('label', { class: 'lbl', for: 'e-title' }, 'Pool name',
