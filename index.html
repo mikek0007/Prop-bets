@@ -137,6 +137,9 @@ input:disabled{opacity:.7}
 .invadd{display:grid;gap:8px}
 .invadd textarea{min-height:90px}
 .sugform{display:grid;gap:10px}
+.linkline{overflow-wrap:anywhere;font-size:14px;color:var(--ink-2);padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.qrimg{width:200px;height:200px;max-width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:8px;background:#fff;justify-self:start}
+.recap textarea{min-height:110px}
 .invprev{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border:1px dashed var(--line);border-radius:8px;font-size:14px;color:var(--ink-2)}
 .chatlist{display:grid;gap:8px;align-content:start;min-height:220px;max-height:min(58vh,520px);overflow-y:auto;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .msg{display:grid;gap:2px;min-width:0;max-width:88%;justify-self:start;padding:8px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
@@ -813,6 +816,18 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         if (lp) { if (!draft.photoTouched) draft.photo = lp.photo || draft.photo || ''; draft.team = lp.team || draft.team || ''; draft.loc = lp.loc || draft.loc || ''; }
       } catch (e) {}
     }
+    if (!mine && loaded.entries && !draft.draftLoaded && !draft.touched && !isLocked() && !results.final) {
+      draft.draftLoaded = true;
+      try {
+        var ld = JSON.parse(lsGet('draft:' + pid) || 'null');
+        if (ld && ld.p && Object.keys(ld.p).length) {
+          draft.picks = Object.assign({}, ld.p);
+          if (!(draft.name || '').trim()) draft.name = ld.n || '';
+          draft.tbA = ld.a || ''; draft.tbB = ld.b || '';
+          draft.touched = true;
+        }
+      } catch (e) {}
+    }
   }
   function resetDraft() {
     draft = { name: lsGet('name'), picks: {}, tiebreak: '', touched: false };
@@ -1035,8 +1050,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('div', { class: 'introtext', text: committee.text })));
     }
     if (!text && !img && !(committee && committee.text)) root.append(note('No welcome message yet', canEditIntro ? 'Tap Edit welcome to write a welcome message.' : 'The host has not posted a welcome message yet.'));
+    var mineE = uid && !canEditIntro ? entries.find(function (e) { return e.id === uid; }) : null;
+    var closedNow = isLocked() || results.final;
+    if (mineE) root.append(h('p', { class: 'status', id: 'youre-in', text: closedNow ? 'You\u2019re locked in. Entries are closed.' : 'You\u2019re locked in. You can change your picks until entries close.' }));
     root.append(h('div', { class: 'submit' },
-      h('a', { class: 'btn link', href: '#entry', text: 'Make your picks' }),
+      mineE ? (closedNow ? h('a', { class: 'btn link', href: '#board', text: 'See the leaderboard' }) : h('a', { class: 'btn link', href: '#entry', text: 'Edit my picks' }))
+        : h('a', { class: 'btn link', href: '#entry', text: 'Make your picks' }),
       canEditIntro ? h('button', { class: 'btn ghost small', type: 'button', text: 'Edit welcome',
         onclick: function () { introDraft = text; introEditing = true; render(); } }) : null));
     root.append(tutorialCard());
@@ -1202,6 +1221,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         : left > 0 ? left + (left === 1 ? ' question left.' : ' questions left.')
         : !tieOk ? 'Add your tiebreaker guess.'
         : (mine && !draft.touched ? 'Your entry is saved.' : 'Ready to submit.');
+      if (!readOnly && !guestId && !mine && draft.touched) lsSet('draft:' + pid, JSON.stringify({ n: draft.name, p: draft.picks, a: draft.tbA, b: draft.tbB }));
     }
     meta();
     return root;
@@ -1286,7 +1306,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       if (wasGuest) {
         guestId = null; resetDraft(); hostTab = 'entries'; location.hash = 'host';
       } else {
-        lsSet('name', name); draft.touched = false; draft.profTouched = false; draft.contactTouched = false; draft.photoTouched = false;
+        lsSet('name', name); lsSet('draft:' + pid, ''); draft.touched = false; draft.profTouched = false; draft.contactTouched = false; draft.photoTouched = false;
       }
     } catch (e) {
       var code = e && e.code;
@@ -1407,6 +1427,13 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     return t;
   }
 
+  function mostPicked(q, rows) {
+    var counts = opts(q).map(function (o, oi) { return rows.filter(function (r) { return r.e.picks && r.e.picks[q.id] === oi; }).length; });
+    var best = -1, bi = -1;
+    counts.forEach(function (c, i) { if (c > best) { best = c; bi = i; } });
+    if (!rows.length || best <= 0) return '';
+    return ' \u00b7 Most picked: ' + opts(q)[bi] + ' ' + Math.round(best / rows.length * 100) + '%';
+  }
   function byQuestion(rows) {
     var list = qs();
     var box = h('div', { class: 'stack' });
@@ -1428,7 +1455,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       },
         h('span', { class: 'rank' }, 'Q' + (qi + 1), a === null ? null : tickEl()),
         h('span', { class: 'wtext' }, h('span', { class: 'name', text: q.text }),
-          h('span', { class: 'hint', text: a === null ? 'Not marked yet' : 'Answer: ' + (opts(q)[a] || '') })),
+          h('span', { class: 'hint', text: (a === null ? 'Not marked yet' : 'Answer: ' + (opts(q)[a] || '')) + mostPicked(q, rows) })),
         h('span', { class: 'pts' }, a === null || !total ? '—' : Math.round(rightN / total * 100) + '%', h('small', { text: a === null ? '' : 'right' }))));
       if (!open) return;
       opts(q).forEach(function (o, oi) {
@@ -1974,11 +2001,11 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!db) return noAccess();
     if (!canEdit) return note('Host only', 'Only the person running the pool can open this tab.');
     var root = h('div', { class: 'stack' });
-    var tabs = [['score', 'Score'], ['setup', 'Setup'], ['build', 'Build pool'], ['entries', 'Entries']];
-    root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Host tools' }, tabs.map(function (t) {
+    var tabs = [['setup', 'Setup'], ['build', 'Build pool'], ['entries', 'Entries'], ['score', 'Score']];
+    root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Host tools' }, [h('a', { href: location.pathname, text: 'All pools' })].concat(tabs.map(function (t) {
       return h('button', { type: 'button', text: t[1], 'aria-pressed': String(hostTab === t[0]),
         onclick: function () { hostTab = t[0]; render(); } });
-    }).concat([h('a', { href: location.pathname, text: 'All pools' })])));
+    }))));
     if (!loaded.game) { root.append(loadingNote()); return root; }
     if (game) root.append(lockCard());
     if (game && hostTab === 'setup') { root.append(noteCard()); root.append(inviteCard()); }
@@ -2000,6 +2027,142 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
         h('button', { class: locked ? 'btn ghost' : 'btn', type: 'button', text: locked ? 'Reopen entries' : 'Close entries now',
           onclick: function () { saveGame(locked ? { locked: false, lockAt: null } : { locked: true }); } }),
         h('button', { class: results.final ? 'btn ghost' : 'btn', type: 'button', text: results.final ? 'Reopen game' : 'Mark final', onclick: toggleFinal })));
+  }
+  /* ---------- tiny QR code encoder (byte mode, error correction M, versions 1-10) ---------- */
+  var QR = (function () {
+    var EXP = new Array(512), LOG = new Array(256);
+    (function () { var x = 1; for (var i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 256) x ^= 0x11d; } for (var j = 255; j < 512; j++) EXP[j] = EXP[j - 255]; })();
+    function gmul(a, b) { return a && b ? EXP[LOG[a] + LOG[b]] : 0; }
+    function rsGen(n) { var g = [1]; for (var i = 0; i < n; i++) { var ng = new Array(g.length + 1).fill(0); for (var j = 0; j < g.length; j++) { ng[j] ^= g[j]; ng[j + 1] ^= gmul(g[j], EXP[i]); } g = ng; } return g; }
+    function rsRem(data, n) { var g = rsGen(n), r = new Array(n).fill(0); data.forEach(function (d) { var f = d ^ r[0]; r.shift(); r.push(0); for (var i = 0; i < n; i++) r[i] ^= gmul(g[i + 1], f); }); return r; }
+    // [ec codewords per block, blocks in group 1, data codewords per group-1 block, blocks in group 2, data codewords per group-2 block]
+    var M = [null, [10, 1, 16, 0, 0], [16, 1, 28, 0, 0], [26, 1, 44, 0, 0], [18, 2, 32, 0, 0], [24, 2, 43, 0, 0], [16, 4, 27, 0, 0], [18, 4, 31, 0, 0], [22, 2, 38, 2, 39], [22, 3, 36, 2, 37], [26, 4, 43, 1, 44]];
+    var ALIGN = [null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+    function dataCap(v) { var t = M[v]; return t[1] * t[2] + t[3] * t[4]; }
+    function bch(v, poly, bits) { var d = v << bits; var top = 0; for (var t = poly; t > 0; t >>= 1) top++; while (true) { var len = 0; for (var q = d; q > 0; q >>= 1) len++; if (len < top) break; d ^= poly << (len - top); } return (v << bits) | d; }
+    function encode(text) {
+      var bytes = []; var u = unescape(encodeURIComponent(text)); for (var i = 0; i < u.length; i++) bytes.push(u.charCodeAt(i));
+      var ver = 0; for (var v = 1; v <= 10; v++) { var cb = v < 10 ? 8 : 16; if (4 + cb + bytes.length * 8 <= dataCap(v) * 8) { ver = v; break; } }
+      if (!ver) return null;
+      var bits = []; function put(val, n) { for (var i = n - 1; i >= 0; i--) bits.push((val >> i) & 1); }
+      put(4, 4); put(bytes.length, ver < 10 ? 8 : 16); bytes.forEach(function (b) { put(b, 8); });
+      var cap = dataCap(ver) * 8; put(0, Math.min(4, cap - bits.length)); while (bits.length % 8) bits.push(0);
+      var cw = []; for (var k = 0; k < bits.length; k += 8) { var x = 0; for (var j = 0; j < 8; j++) x = (x << 1) | bits[k + j]; cw.push(x); }
+      for (var pad = 0; cw.length < dataCap(ver); pad++) cw.push(pad % 2 ? 0x11 : 0xec);
+      var t = M[ver], blocks = [], pos = 0;
+      for (var b = 0; b < t[1] + t[3]; b++) { var len = b < t[1] ? t[2] : t[4]; blocks.push({ d: cw.slice(pos, pos + len) }); pos += len; }
+      blocks.forEach(function (bl) { bl.e = rsRem(bl.d, t[0]); });
+      var out = [], maxD = Math.max(t[2], t[4]);
+      for (var c = 0; c < maxD; c++) blocks.forEach(function (bl) { if (c < bl.d.length) out.push(bl.d[c]); });
+      for (var e = 0; e < t[0]; e++) blocks.forEach(function (bl) { out.push(bl.e[e]); });
+      var n = ver * 4 + 17, g = [], fn = [];
+      for (var r = 0; r < n; r++) { g.push(new Array(n).fill(0)); fn.push(new Array(n).fill(false)); }
+      function setF(r, c, val) { if (r < 0 || c < 0 || r >= n || c >= n) return; g[r][c] = val ? 1 : 0; fn[r][c] = true; }
+      function finder(r0, c0) { for (var dr = -1; dr <= 7; dr++) for (var dc = -1; dc <= 7; dc++) { var on = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6 && (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4)); setF(r0 + dr, c0 + dc, on); } }
+      finder(0, 0); finder(0, n - 7); finder(n - 7, 0);
+      for (var i2 = 8; i2 < n - 8; i2++) { setF(6, i2, i2 % 2 === 0); setF(i2, 6, i2 % 2 === 0); }
+      var al = ALIGN[ver];
+      al.forEach(function (ar) { al.forEach(function (ac) {
+        if ((ar === 6 && ac === 6) || (ar === 6 && ac === al[al.length - 1]) || (ac === 6 && ar === al[al.length - 1])) return;
+        for (var dr = -2; dr <= 2; dr++) for (var dc = -2; dc <= 2; dc++) setF(ar + dr, ac + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+      }); });
+      setF(n - 8, 8, true);
+      for (var q = 0; q < 9; q++) { if (!fn[8][q]) { fn[8][q] = true; } if (!fn[q][8]) { fn[q][8] = true; } }
+      for (var q2 = 0; q2 < 8; q2++) { fn[8][n - 1 - q2] = true; fn[n - 1 - q2][8] = true; }
+      if (ver >= 7) { var vi = bch(ver, 0x1f25, 12); for (var q3 = 0; q3 < 18; q3++) { var bit = (vi >> q3) & 1, a = Math.floor(q3 / 3), bb = q3 % 3 + n - 11; setF(a, bb, bit); setF(bb, a, bit); } }
+      var dbits = []; out.forEach(function (byte) { for (var i = 7; i >= 0; i--) dbits.push((byte >> i) & 1); });
+      var bi = 0, up = true;
+      var cells = [];
+      for (var col = n - 1; col > 0; col -= 2) {
+        if (col === 6) col--;
+        for (var step = 0; step < n; step++) { var row = up ? n - 1 - step : step; for (var cc = 0; cc < 2; cc++) { var c2 = col - cc; if (!fn[row][c2]) { cells.push([row, c2, bi < dbits.length ? dbits[bi] : 0]); bi++; } } }
+        up = !up;
+      }
+      var maskFns = [function (r, c) { return (r + c) % 2 === 0; }, function (r) { return r % 2 === 0; }, function (r, c) { return c % 3 === 0; }, function (r, c) { return (r + c) % 3 === 0; },
+        function (r, c) { return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0; }, function (r, c) { return (r * c) % 2 + (r * c) % 3 === 0; },
+        function (r, c) { return ((r * c) % 2 + (r * c) % 3) % 2 === 0; }, function (r, c) { return ((r + c) % 2 + (r * c) % 3) % 2 === 0; }];
+      function build(mask) {
+        var m = g.map(function (row) { return row.slice(); });
+        cells.forEach(function (ce) { m[ce[0]][ce[1]] = ce[2] ^ (maskFns[mask](ce[0], ce[1]) ? 1 : 0); });
+        var f = bch((0 << 3) | mask, 0x537, 10) ^ 0x5412; // ECC level M = 00
+        for (var i = 0; i < 15; i++) {
+          var bit = (f >> i) & 1;
+          if (i < 6) m[i][8] = bit; else if (i < 8) m[i + 1][8] = bit; else m[n - 15 + i][8] = bit;
+          if (i < 8) m[8][n - 1 - i] = bit; else if (i < 9) m[8][15 - i] = bit; else m[8][14 - i] = bit;
+        }
+        m[n - 8][8] = 1;
+        return m;
+      }
+      function penalty(m) {
+        var p = 0, i, j;
+        for (i = 0; i < n; i++) { var rr = 1, cr = 1; for (j = 1; j < n; j++) {
+          if (m[i][j] === m[i][j - 1]) { rr++; if (rr === 5) p += 3; else if (rr > 5) p++; } else rr = 1;
+          if (m[j][i] === m[j - 1][i]) { cr++; if (cr === 5) p += 3; else if (cr > 5) p++; } else cr = 1; } }
+        for (i = 0; i < n - 1; i++) for (j = 0; j < n - 1; j++) { var s = m[i][j] + m[i][j + 1] + m[i + 1][j] + m[i + 1][j + 1]; if (s === 0 || s === 4) p += 3; }
+        var pat = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0], pat2 = pat.slice().reverse();
+        function match(arr, st, pt) { for (var k = 0; k < 11; k++) if (arr[st + k] !== pt[k]) return false; return true; }
+        for (i = 0; i < n; i++) { var row = m[i], colA = m.map(function (r) { return r[i]; });
+          for (j = 0; j + 11 <= n; j++) { if (match(row, j, pat) || match(row, j, pat2)) p += 40; if (match(colA, j, pat) || match(colA, j, pat2)) p += 40; } }
+        var dark = 0; for (i = 0; i < n; i++) for (j = 0; j < n; j++) dark += m[i][j];
+        p += Math.floor(Math.abs(dark * 100 / (n * n) - 50) / 5) * 10;
+        return p;
+      }
+      var best = null, bestP = 1e9;
+      for (var mk = 0; mk < 8; mk++) { var mm = build(mk), pp = penalty(mm); if (pp < bestP) { bestP = pp; best = mm; } }
+      return best;
+    }
+    return { matrix: encode };
+  })();
+
+  function qrCanvas(text, scale) {
+    var m = QR.matrix(text);
+    if (!m) return null;
+    var n = m.length, q = 4, c = document.createElement('canvas');
+    c.width = c.height = (n + 2 * q) * scale;
+    var x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#000';
+    for (var r = 0; r < n; r++) for (var cc = 0; cc < n; cc++) if (m[r][cc]) x.fillRect((cc + q) * scale, (r + q) * scale, scale, scale);
+    return c;
+  }
+  function copyLinkText(text) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      ta.remove(); return ok;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallback(); });
+    }
+    return Promise.resolve(fallback());
+  }
+  function linkCard() {
+    var url = inviteUrl('');
+    var wrap = h('div', { class: 'stack linkbox' });
+    wrap.append(h('div', { class: 'lbl' }, 'Pool link', h('small', { text: 'The same link for everyone. Share it in a group text, an email, or show the code.' })));
+    wrap.append(h('div', { class: 'linkline', id: 'pool-link', text: url }));
+    wrap.append(h('div', { class: 'qedit-tools' },
+      h('button', { class: 'btn small', type: 'button', id: 'copy-link', text: 'Copy link', onclick: function () {
+        copyLinkText(url).then(function (ok) { toast(ok ? 'Link copied' : 'Couldn\u2019t copy. Press and hold the link to copy it.'); });
+      } })));
+    var cv = qrCanvas(url, 8);
+    if (cv) {
+      var img = h('img', { class: 'qrimg', id: 'qr-img', src: cv.toDataURL('image/png'), alt: 'QR code for the pool link', width: 200, height: 200 });
+      wrap.append(img);
+      wrap.append(h('div', { class: 'qedit-tools' },
+        h('button', { class: 'btn ghost small', type: 'button', id: 'qr-save', text: 'Save QR image', onclick: function () {
+          var big = qrCanvas(url, 12);
+          big.toBlob(function (b) {
+            if (!b) { toast('Press and hold the code to save it.'); return; }
+            var u = URL.createObjectURL(b), a = document.createElement('a');
+            a.href = u; a.download = 'pool-qr.png'; document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+          }, 'image/png');
+        } })));
+    }
+    return wrap;
   }
   function newToken() {
     var a = new Uint8Array(14), al = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -2049,6 +2212,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
   function inviteCard() {
     var box = h('div', { class: 'card stack' });
+    box.append(linkCard());
     box.append(h('div', { class: 'lbl' }, 'Invite people', h('small', { text: 'Add a name with an email or phone number. Send opens your Messages or Mail with the pool link ready. Each person gets their own link, so their details fill in when they open it.' })));
     var sent = inviteList.length, opened = inviteList.filter(function (v) { return v.uid; }).length;
     var entered = inviteList.filter(function (v) { return v.uid && entries.some(function (e) { return e.id === v.uid; }); }).length;
@@ -2238,7 +2402,32 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     });
   }
 
-  var scoreOpenOnly = false;
+  var scoreOpenOnly = false, recapDraft = null;
+  function composeRecap() {
+    var rows = ranked(), list = qs();
+    var scored = list.filter(function (q) { return answerOf(q) !== null; });
+    if (!rows.length || !scored.length) return 'Recap: nothing has been scored yet.';
+    var lead = rows.filter(function (r) { return r.rank === 1; });
+    var nm = lead.map(function (r) { return r.e.name || 'Unnamed'; }).join(' & ');
+    var parts = ['Recap after ' + scored.length + ' of ' + list.length + ' questions: ' + nm + (lead.length > 1 ? ' are tied for the lead' : ' leads') + ' with ' + lead[0].pts + ' pts.'];
+    var second = rows.find(function (r) { return r.rank > 1; });
+    if (second) parts.push((second.e.name || 'Unnamed') + ' is ' + (lead[0].pts - second.pts) + ' back.');
+    try {
+      var st = liveStory();
+      var climb = st.cards.find(function (c) { return c.title === 'Biggest climb'; });
+      if (climb) parts.push(climb.text);
+    } catch (e) {}
+    var worst = null;
+    scored.forEach(function (q) {
+      var right = rows.filter(function (r) { return r.e.picks && r.e.picks[q.id] === answerOf(q); }).length;
+      var pct = Math.round(right / rows.length * 100);
+      if (!worst || pct < worst.pct) worst = { q: q, pct: pct, n: list.indexOf(q) + 1 };
+    });
+    if (worst) parts.push('Toughest so far: Q' + worst.n + ', only ' + worst.pct + '% got it.');
+    var out = '';
+    parts.forEach(function (x) { if ((out + ' ' + x).trim().length <= 280) out = (out + ' ' + x).trim(); });
+    return out || parts[0].slice(0, 280);
+  }
   function hostScore() {
     var box = h('div', { class: 'stack' });
     var list = qs();
@@ -2249,6 +2438,21 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       [[false, 'All questions'], [true, 'Unmarked (' + open + ')']].map(function (t) {
         return h('button', { type: 'button', text: t[1], 'aria-pressed': String(scoreOpenOnly === t[0]), onclick: function () { scoreOpenOnly = t[0]; render(); } });
       })));
+    if (recapDraft === null) {
+      box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'recap-open', text: 'Post a recap to Trash Talk', onclick: function () { recapDraft = composeRecap(); render(); } })));
+    } else {
+      var rta = h('textarea', { id: 'recap-text', rows: 5, maxLength: 280, value: recapDraft, oninput: function (ev) { recapDraft = ev.target.value; var c = document.getElementById('recap-count'); if (c) c.textContent = recapDraft.length + ' of 280'; } });
+      box.append(h('div', { class: 'card stack recap' },
+        h('label', { class: 'lbl', for: 'recap-text' }, 'Recap for Trash Talk', h('small', { text: 'It posts as the Prop Bet Committee. Edit it first if you like.' }), rta),
+        h('small', { class: 'hint', id: 'recap-count', text: recapDraft.length + ' of 280' }),
+        h('div', { class: 'qedit-tools' },
+          h('button', { class: 'btn small', type: 'button', id: 'recap-post', text: 'Post', onclick: function () {
+            var t = (recapDraft || '').trim().slice(0, 280);
+            if (!t) { toast('Write something first.'); return; }
+            enqueue(function () { return db.collection('chat').add({ name: 'Prop Bet Committee', text: t, ts: Date.now(), uid: uid }); }).then(function (ok) { if (ok) { recapDraft = null; toast('Posted to Trash Talk'); render(); } });
+          } }),
+          h('button', { class: 'btn ghost small', type: 'button', text: 'Cancel', onclick: function () { recapDraft = null; render(); } }))));
+    }
     if (scoreOpenOnly && !open) box.append(note('All marked', 'Every question has an answer.'));
     list.forEach(function (q, qi) {
       var a = answerOf(q);
@@ -2269,13 +2473,13 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     });
     if (game.tiebreak && tbTotal()) {
       box.append(h('div', { class: 'card stack' },
-        h('label', { class: 'lbl', for: 'f-acta' }, 'Actual total score', h('small', { text: 'Enter the real number once the game ends. The closest guess wins ties.' }),
+        h('label', { class: 'lbl', for: 'f-acta' }, game.tiebreak, h('small', { text: 'Tiebreaker. Enter the real number once the game ends. The closest guess wins ties.' }),
           h('input', { type: 'number', id: 'f-acta', inputMode: 'numeric', min: '0', max: '999',
             value: typeof results.tbA === 'number' ? String(results.tbA) : '',
             onchange: function (ev) { saveResults({ tbA: ev.target.value === '' ? null : Number(ev.target.value) }); } }))));
     } else if (game.tiebreak) {
       box.append(h('div', { class: 'card stack' },
-        h('div', { class: 'lbl' }, 'Actual final score', h('small', { text: 'Enter both scores once the game ends.' })),
+        h('div', { class: 'lbl' }, game.tiebreak, h('small', { text: 'Tiebreaker. Enter both final scores once the game ends.' })),
         h('div', { class: 'scorepair' },
           h('label', { class: 'lbl', for: 'f-acta' }, teamA(),
             h('input', { type: 'number', id: 'f-acta', inputMode: 'numeric', min: '0', max: '99',
