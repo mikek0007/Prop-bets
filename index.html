@@ -864,8 +864,12 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   }
 
   function renderMast() {
+    var cachedTitle = pid ? lsGet('title:' + pid) : '';
+    var shownTitle = (game && game.title) || (loaded.game ? 'Super Bowl Pool' : cachedTitle);
+    if (pid && game && game.title) lsSet('title:' + pid, game.title);
+    if (shownTitle) document.title = shownTitle;
     $mast.replaceChildren(
-      h('h1', { text: (game && game.title) || 'Super Bowl Pool' }),
+      h('h1', { text: shownTitle || '\u00a0' }),
       h('p', { class: 'status', text: statusLine() })
     );
   }
@@ -882,7 +886,8 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       return h('a', { href: '#' + it[0], 'aria-current': view === it[0] ? 'page' : null,
           onclick: function (ev) { if (it[0] !== view && !leaveOk()) ev.preventDefault(); } },
         it[1], it[0] === 'chat' && unread ? h('span', { class: 'dot', 'aria-label': 'new messages' }) : null,
-        it[0] === 'intro' && noteNew ? h('span', { class: 'dot', 'aria-label': 'new note' }) : null);
+        it[0] === 'intro' && noteNew ? h('span', { class: 'dot', 'aria-label': 'new note' }) : null,
+        it[0] === 'host' && suggUnseen() && !(view === 'host' && hostTab === 'people') ? h('span', { class: 'dot', 'aria-label': 'new suggestions' }) : null);
     }));
   }
 
@@ -1304,7 +1309,7 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
       } catch (e) {}
       toast('Entry saved');
       if (wasGuest) {
-        guestId = null; resetDraft(); hostTab = 'entries'; location.hash = 'host';
+        guestId = null; resetDraft(); hostTab = 'people'; location.hash = 'host';
       } else {
         lsSet('name', name); lsSet('draft:' + pid, ''); draft.touched = false; draft.profTouched = false; draft.contactTouched = false; draft.photoTouched = false;
       }
@@ -2001,15 +2006,16 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     if (!db) return noAccess();
     if (!canEdit) return note('Host only', 'Only the person running the pool can open this tab.');
     var root = h('div', { class: 'stack' });
-    var tabs = [['setup', 'Setup'], ['build', 'Build pool'], ['entries', 'Entries'], ['score', 'Score']];
+    var tabs = [['setup', 'Setup'], ['build', 'Build pool'], ['people', 'People'], ['score', 'Score']];
+    if (hostTab === 'people' && suggMaxAt() > (Number(lsGet(suggSeenKey())) || 0)) lsSet(suggSeenKey(), String(suggMaxAt()));
     root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Host tools' }, [h('a', { href: location.pathname, text: 'All pools' })].concat(tabs.map(function (t) {
-      return h('button', { type: 'button', text: t[1], 'aria-pressed': String(hostTab === t[0]),
-        onclick: function () { hostTab = t[0]; render(); } });
+      return h('button', { type: 'button', 'aria-pressed': String(hostTab === t[0]),
+        onclick: function () { hostTab = t[0]; render(); } }, t[1], t[0] === 'people' && suggUnseen() ? h('span', { class: 'dot', 'aria-label': 'new suggestions' }) : null);
     }))));
     if (!loaded.game) { root.append(loadingNote()); return root; }
     if (game) root.append(lockCard());
     if (game && hostTab === 'setup') { root.append(noteCard()); root.append(inviteCard()); }
-    root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'build' ? hostBuild() : hostTab === 'entries' ? hostEntries() : hostScore());
+    root.append(hostTab === 'setup' ? hostSetup() : hostTab === 'build' ? hostBuild() : hostTab === 'people' ? hostPeople() : hostScore());
     return root;
   }
 
@@ -2213,81 +2219,85 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
   function inviteCard() {
     var box = h('div', { class: 'card stack' });
     box.append(linkCard());
-    box.append(h('div', { class: 'lbl' }, 'Invite people', h('small', { text: 'Add a name with an email or phone number. Send opens your Messages or Mail with the pool link ready. Each person gets their own link, so their details fill in when they open it.' })));
-    var sent = inviteList.length, opened = inviteList.filter(function (v) { return v.uid; }).length;
-    var entered = inviteList.filter(function (v) { return v.uid && entries.some(function (e) { return e.id === v.uid; }); }).length;
-    if (sent) box.append(h('p', { class: 'status', text: sent + ' invited · ' + opened + ' opened · ' + entered + ' entered' }));
+    box.append(h('div', { class: 'lbl' }, 'Invite message', h('small', { text: 'Add people and send their invites on the People tab. Each person gets their own link, so their details fill in when they open it.' })));
     var msgBox = h('textarea', { id: 'inv-msg', rows: 3, maxLength: 500, value: inviteIntro(),
       onchange: function (ev) {
         var v = ev.target.value.trim(), dflt = 'Join our ' + ((game && game.title) || 'Super Bowl pool') + '! Make your picks at the link below.';
         saveGame({ inviteMsg: v && v !== dflt ? v : null });
       } });
-    box.append(h('label', { class: 'lbl', for: 'inv-msg' }, 'Invite message',
-      h('small', { text: 'This goes in every invite. Each person\u2019s own link is added under it automatically.' }), msgBox));
+    box.append(h('label', { class: 'lbl', for: 'inv-msg' }, 'Message',
+      h('small', { text: 'This goes in every invite. Each person’s own link is added under it automatically.' }), msgBox));
     box.append(h('label', { class: 'lbl' }, h('span', {},
       h('input', { type: 'checkbox', id: 'inv-sugg', checked: !(game && game.inviteSuggest === false),
         onchange: function (ev) { saveGame({ inviteSuggest: ev.target.checked ? null : false }); render(); } }), ' Add the "suggest a player" line')));
     box.append(h('div', { class: 'hint', 'aria-label': 'Preview of the invite' }, 'Preview:'));
     box.append(h('div', { class: 'invprev', id: 'inv-prev', text: inviteText('yourpersonallink') }));
-    box.append(h('div', { class: 'invadd' },
-      h('label', { class: 'lbl', for: 'inv-name' }, 'Name', h('input', { type: 'text', id: 'inv-name', maxLength: 60, value: invForm.name, autocomplete: 'off', oninput: function (ev) { invForm.name = ev.target.value; } })),
-      h('label', { class: 'lbl', for: 'inv-contact' }, 'Email or phone', h('input', { type: 'text', id: 'inv-contact', maxLength: 80, value: invForm.contact, autocomplete: 'off', inputMode: 'email', oninput: function (ev) { invForm.contact = ev.target.value; } })),
-      h('div', { class: 'qedit-tools' }, h('button', { class: 'btn small', type: 'button', id: 'inv-add', text: 'Add person', onclick: function () {
-        addInvites([{ name: invForm.name, contact: invForm.contact }]).then(function (ok) { if (ok) { invForm.name = ''; invForm.contact = ''; render(); } });
-      } })),
-      h('label', { class: 'lbl', for: 'inv-paste' }, 'Or paste a list', h('small', { text: 'One person per line: name, then email or phone.' }),
-        h('textarea', { id: 'inv-paste', rows: 4, value: invForm.paste, oninput: function (ev) { invForm.paste = ev.target.value; } })),
-      h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'inv-addlist', text: 'Add list', onclick: function () {
-        var rows = invForm.paste.split(/\n+/).map(function (ln) {
-          var parts = ln.split(/[,\t;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
-          if (!parts.length) return null;
-          if (parts.length === 1) return { name: '', contact: parts[0] };
-          return { name: parts[0], contact: parts[parts.length - 1] };
-        }).filter(Boolean);
-        if (!rows.length) { toast('Paste at least one line.'); return; }
-        addInvites(rows).then(function (ok) { if (ok) { invForm.paste = ''; render(); } });
-      } }))));
-    inviteList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (v) {
-      var st = v.uid && entries.some(function (e) { return e.id === v.uid; }) ? ['good', 'Entered'] : v.uid ? ['wait', 'Opened'] : (v.sentAt || sentNow[v.id]) ? ['wait', 'Sent'] : ['wait', 'Not sent'];
-      var contact = v.email || v.phone || '';
-      var href = inviteHref(v);
-      box.append(h('div', { class: 'invrow', 'data-inv': v.id },
-        h('div', { class: 'prow' },
-          h('div', { class: 'ptext' }, h('div', { class: 'pq', text: v.name || contact }), h('div', { class: 'pa', text: contact })),
-          h('span', { class: 'tag ' + st[0], text: st[1] })),
-        h('div', { class: 'qedit-tools' },
-          h('a', { class: 'btn small link', href: href, text: (v.sentAt || sentNow[v.id]) ? 'Send again' : 'Send',
-            onclick: function () { markSent(v); } }),
-          h('button', { class: 'btn ghost small', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + (v.name || contact),
-            onclick: function () { if (window.confirm('Remove ' + (v.name || contact) + ' from the list?')) enqueue(function () { return db.doc('invites/' + v.id).delete(); }); } }))));
-    });
-    var left = unsentInvites().length;
-    if (inviteList.length) {
-      box.append(h('div', { class: 'qedit-tools' },
-        h('button', { class: left ? 'btn small' : 'btn ghost small', type: 'button', id: 'send-all', disabled: !left,
-          text: left ? (Object.keys(sentNow).length ? 'Send next (' + left + ' left)' : 'Send all (' + left + ' left)') : 'Everyone has been sent', onclick: sendNext }),
-        h('small', { class: 'hint', text: left ? 'Opens Messages or Mail for the next person who has not been sent a link. Come back here and tap again for the next one.' : 'Nobody is sent a second time. Use Send again on a row to resend.' })));
-    }
-    if (suggList.length) {
-      box.append(h('div', { class: 'lbl' }, 'Suggested players', h('small', { text: 'Guests suggested these people. Add moves them to your invite list. Nothing is sent to them until you tap Send.' })));
-      suggList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (x) {
-        box.append(h('div', { class: 'invrow', 'data-sug': x.id },
-          h('div', { class: 'ptext' }, h('div', { class: 'pq', text: x.name }), h('div', { class: 'pa', text: x.contact + (x.by ? ' · suggested by ' + x.by : '') })),
-          h('div', { class: 'qedit-tools' },
-            h('button', { class: 'btn small', type: 'button', text: 'Add', onclick: function () {
-              addInvites([{ name: x.name, contact: x.contact }]).then(function (ok) { if (ok) enqueue(function () { return db.doc('suggestions/' + x.id).delete(); }); });
-            } }),
-            h('button', { class: 'btn ghost small', type: 'button', text: 'Dismiss', onclick: function () { enqueue(function () { return db.doc('suggestions/' + x.id).delete(); }); } }))));
-      });
-      box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', text: 'Clear all suggestions', onclick: function () {
-        if (!window.confirm('Remove all suggestions?')) return;
-        enqueue(async function () { for (var i = 0; i < suggList.length; i++) await db.doc('suggestions/' + suggList[i].id).delete(); });
-      } })));
-    }
-    box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'backup-btn', text: 'Download backup', onclick: exportBackup }),
-      h('small', { class: 'hint', text: 'Saves all entries, answers and the Hall of Fame to a file.' })));
     return box;
   }
+  function addPeopleCard() {
+    return h('div', { class: 'card stack' },
+      h('div', { class: 'lbl' }, 'Add people', h('small', { text: 'Add a name with an email or phone number. Send opens your Messages or Mail with their own link ready.' })),
+      h('div', { class: 'invadd' },
+        h('label', { class: 'lbl', for: 'inv-name' }, 'Name', h('input', { type: 'text', id: 'inv-name', maxLength: 60, value: invForm.name, autocomplete: 'off', oninput: function (ev) { invForm.name = ev.target.value; } })),
+        h('label', { class: 'lbl', for: 'inv-contact' }, 'Email or phone', h('input', { type: 'text', id: 'inv-contact', maxLength: 80, value: invForm.contact, autocomplete: 'off', inputMode: 'email', oninput: function (ev) { invForm.contact = ev.target.value; } })),
+        h('div', { class: 'qedit-tools' }, h('button', { class: 'btn small', type: 'button', id: 'inv-add', text: 'Add person', onclick: function () {
+          addInvites([{ name: invForm.name, contact: invForm.contact }]).then(function (ok) { if (ok) { invForm.name = ''; invForm.contact = ''; render(); } });
+        } })),
+        h('label', { class: 'lbl', for: 'inv-paste' }, 'Or paste a list', h('small', { text: 'One person per line: name, then email or phone.' }),
+          h('textarea', { id: 'inv-paste', rows: 4, value: invForm.paste, oninput: function (ev) { invForm.paste = ev.target.value; } })),
+        h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'inv-addlist', text: 'Add list', onclick: function () {
+          var rows = invForm.paste.split(/\n+/).map(function (ln) {
+            var parts = ln.split(/[,\t;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+            if (!parts.length) return null;
+            if (parts.length === 1) return { name: '', contact: parts[0] };
+            return { name: parts[0], contact: parts[parts.length - 1] };
+          }).filter(Boolean);
+          if (!rows.length) { toast('Paste at least one line.'); return; }
+          addInvites(rows).then(function (ok) { if (ok) { invForm.paste = ''; render(); } });
+        } }))));
+  }
+  function inviteRowEl(v) {
+    var st = v.uid && entries.some(function (e) { return e.id === v.uid; }) ? ['good', 'Entered'] : v.uid ? ['wait', 'Opened'] : (v.sentAt || sentNow[v.id]) ? ['wait', 'Sent'] : ['wait', 'Not sent'];
+    var contact = v.email || v.phone || '';
+    return h('div', { class: 'card invrow', 'data-inv': v.id },
+      h('div', { class: 'prow' },
+        h('div', { class: 'ptext' }, h('div', { class: 'pq', text: v.name || contact }), h('div', { class: 'pa', text: contact })),
+        h('span', { class: 'tag ' + st[0], text: st[1] })),
+      h('div', { class: 'qedit-tools' },
+        h('a', { class: 'btn small link', href: inviteHref(v), text: (v.sentAt || sentNow[v.id]) ? 'Send again' : 'Send',
+          onclick: function () { markSent(v); } }),
+        h('button', { class: 'btn ghost small', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + (v.name || contact),
+          onclick: function () { if (window.confirm('Remove ' + (v.name || contact) + ' from the list?')) enqueue(function () { return db.doc('invites/' + v.id).delete(); }); } })));
+  }
+  function sendAllRow() {
+    var left = unsentInvites().length;
+    return h('div', { class: 'qedit-tools' },
+      h('button', { class: left ? 'btn small' : 'btn ghost small', type: 'button', id: 'send-all', disabled: !left,
+        text: left ? (Object.keys(sentNow).length ? 'Send next (' + left + ' left)' : 'Send all (' + left + ' left)') : 'Everyone has been sent', onclick: sendNext }),
+      h('small', { class: 'hint', text: left ? 'Opens Messages or Mail for the next person who has not been sent a link. Come back here and tap again for the next one.' : 'Nobody is sent a second time. Use Send again on a row to resend.' }));
+  }
+  function suggestionsCard() {
+    if (!suggList.length) return null;
+    var box = h('div', { class: 'card stack', id: 'sugg-card' });
+    box.append(h('div', { class: 'lbl' }, 'Suggested players', h('small', { text: 'Guests suggested these people. Add puts them on your list below. Nothing is sent to them until you tap Send.' })));
+    suggList.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (x) {
+      box.append(h('div', { class: 'invrow', 'data-sug': x.id },
+        h('div', { class: 'ptext' }, h('div', { class: 'pq', text: x.name }), h('div', { class: 'pa', text: x.contact + (x.by ? ' · suggested by ' + x.by : '') })),
+        h('div', { class: 'qedit-tools' },
+          h('button', { class: 'btn small', type: 'button', text: 'Add', onclick: function () {
+            addInvites([{ name: x.name, contact: x.contact }]).then(function (ok) { if (ok) enqueue(function () { return db.doc('suggestions/' + x.id).delete(); }); });
+          } }),
+          h('button', { class: 'btn ghost small', type: 'button', text: 'Dismiss', onclick: function () { enqueue(function () { return db.doc('suggestions/' + x.id).delete(); }); } }))));
+    });
+    box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', text: 'Clear all suggestions', onclick: function () {
+      if (!window.confirm('Remove all suggestions?')) return;
+      enqueue(async function () { for (var i = 0; i < suggList.length; i++) await db.doc('suggestions/' + suggList[i].id).delete(); });
+    } })));
+    return box;
+  }
+  function suggMaxAt() { return suggList.reduce(function (m, x) { return Math.max(m, x.at || 1); }, 0); }
+  function suggSeenKey() { return 'suggSeen:' + pid; }
+  function suggUnseen() { return canEdit && suggMaxAt() > (Number(lsGet(suggSeenKey())) || 0); }
   function renderSuggest() {
     if (!db) return noAccess();
     var root = h('div', { class: 'stack' });
@@ -2754,18 +2764,49 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
     toast('Spreadsheet downloaded');
   }
 
-  function hostEntries() {
+  function entryRowEl(e) {
+    var confirming = confirmId === e.id;
+    return h('div', { class: 'card entry-row', 'data-entry': e.id },
+      h('div', { class: 'ptext' },
+        h('span', { class: 'who' }, miniAvatar(e.photo, e.name), h('span', { class: 'name', text: e.name || 'Unnamed' }), h('span', { class: 'tag good', text: 'Entered' })),
+        e.by === 'host' ? h('span', { class: 'hint', text: 'Entered by you' }) : null,
+        [contactInfo(e).full, contactInfo(e).email, contactInfo(e).phone].filter(Boolean).map(function (t) { return h('span', { class: 'hint', text: t }); }),
+        e.photo ? h('button', { class: 'linkbtn', type: 'button', text: 'Remove photo', style: 'justify-self:start;padding:4px 0', onclick: function () {
+          db.doc('entries/' + e.id).update({ photo: null }).then(function () { toast('Photo removed'); }, function () { toast("Couldn't remove that photo."); });
+        } }) : null),
+      isOwner ? h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm remove' : 'Remove',
+        onclick: function () {
+          if (!confirming) {
+            confirmId = e.id; clearTimeout(confirmTimer);
+            confirmTimer = setTimeout(function () { confirmId = null; render(); }, 4000);
+            render(); return;
+          }
+          confirmId = null;
+          db.doc('contacts/' + e.id).delete().then(null, function () {});
+          db.doc('entries/' + e.id).delete().then(function () { toast('Entry removed'); }, function () { toast("Couldn't remove that entry."); });
+          render();
+        } }) : null);
+  }
+  function hostPeople() {
     var box = h('div', { class: 'stack' });
-    var list = entries.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    var sg = suggestionsCard();
+    if (sg) box.append(sg);
+    var ents = entries.slice().sort(function (a, b) { return (a.submittedAt || 0) - (b.submittedAt || 0); });
+    var entIds = {}; ents.forEach(function (e) { entIds[e.id] = true; });
+    var pending = inviteList.filter(function (v) { return !(v.uid && entIds[v.uid]); });
+    function rk(v) { return v.uid ? 0 : (v.sentAt || sentNow[v.id]) ? 1 : 2; }
+    pending.sort(function (a, b) { return (rk(a) - rk(b)) || ((a.at || 0) - (b.at || 0)); });
     box.append(h('div', { class: 'toggle' },
-      h('p', { class: 'status', text: list.length + (list.length === 1 ? ' entry' : ' entries') }),
+      h('p', { class: 'status', text: ents.length + ' entered' + (pending.length ? ' · ' + pending.length + ' not yet' : '') }),
       isOwner ? h('button', { class: 'btn small', type: 'button', text: 'Add for someone', onclick: function () {
         guestId = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         draft = { name: '', picks: {}, tiebreak: '', touched: true };
         location.hash = 'entry'; readHash(); render();
       } }) : null));
+    box.append(addPeopleCard());
+    if (inviteList.length) box.append(sendAllRow());
     var cl = contactLists();
-    if (list.length) {
+    if (ents.length) {
       box.append(h('div', { class: 'card stack' },
         h('div', { class: 'lbl' }, 'Contacts',
           h('small', { text: cl.all.length
@@ -2775,34 +2816,15 @@ const TROPHY_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEB
           cl.emails.length ? h('button', { class: 'btn ghost small', type: 'button', text: 'Copy emails (' + cl.emails.length + ')', onclick: function () { copyText(cl.emails.join(', '), 'Emails copied'); } }) : null,
           cl.phones.length ? h('button', { class: 'btn ghost small', type: 'button', text: 'Copy phones (' + cl.phones.length + ')', onclick: function () { copyText(cl.phones.join(', '), 'Phone numbers copied'); } }) : null,
           h('button', { class: 'btn ghost small', type: 'button', text: 'Copy names + contacts', onclick: function () { copyText(cl.all.join('\n'), 'Copied'); } })) : null));
+      box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', text: 'Export to Excel', onclick: exportXlsx }),
+        h('span', { class: 'hint', text: 'One row per player, with an Answers row at the top. Contact details are not included.' })));
     }
-    if (list.length) box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', text: 'Export to Excel', onclick: exportXlsx }),
-      h('span', { class: 'hint', text: 'One row per player, with an Answers row at the top. Contact details are not included.' })));
-    if (!list.length) box.append(note('No entries yet', 'Share the site link. Nobody needs an account to enter.'));
-    list.forEach(function (e) {
-      var confirming = confirmId === e.id;
-      box.append(h('div', { class: 'card entry-row' },
-        h('div', { class: 'ptext' },
-          h('span', { class: 'who' }, miniAvatar(e.photo, e.name), h('span', { class: 'name', text: e.name || 'Unnamed' })),
-          e.by === 'host' ? h('span', { class: 'hint', text: 'Entered by you' }) : null,
-          [contactInfo(e).full, contactInfo(e).email, contactInfo(e).phone].filter(Boolean).map(function (t) { return h('span', { class: 'hint', text: t }); }),
-          e.photo ? h('button', { class: 'linkbtn', type: 'button', text: 'Remove photo', style: 'justify-self:start;padding:4px 0', onclick: function () {
-            db.doc('entries/' + e.id).update({ photo: null }).then(function () { toast('Photo removed'); }, function () { toast("Couldn't remove that photo."); });
-          } }) : null),
-        isOwner ? h('button', { class: 'btn ghost small', type: 'button', text: confirming ? 'Confirm remove' : 'Remove',
-          onclick: function () {
-            if (!confirming) {
-              confirmId = e.id; clearTimeout(confirmTimer);
-              confirmTimer = setTimeout(function () { confirmId = null; render(); }, 4000);
-              render(); return;
-            }
-            confirmId = null;
-            db.doc('contacts/' + e.id).delete().then(null, function () {});
-            db.doc('entries/' + e.id).delete().then(function () { toast('Entry removed'); }, function () { toast("Couldn't remove that entry."); });
-            render();
-          } }) : null));
-    });
-    if (list.length && !isOwner) box.append(h('p', { class: 'hint', text: 'Only the host can add or remove entries.' }));
+    box.append(h('div', { class: 'qedit-tools' }, h('button', { class: 'btn ghost small', type: 'button', id: 'backup-btn', text: 'Download backup', onclick: exportBackup }),
+      h('small', { class: 'hint', text: 'Saves all entries, answers and the Hall of Fame to a file.' })));
+    if (!ents.length && !pending.length) box.append(note('No one yet', 'Add people above, or share the pool link. Nobody needs an account to enter.'));
+    ents.forEach(function (e) { box.append(entryRowEl(e)); });
+    pending.forEach(function (v) { box.append(inviteRowEl(v)); });
+    if (ents.length && !isOwner) box.append(h('p', { class: 'hint', text: 'Only the host can add or remove entries.' }));
     return box;
   }
 
